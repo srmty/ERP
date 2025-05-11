@@ -1337,10 +1337,10 @@ def recreate_database():
         # Create all tables
         db.create_all()
         # Create admin user if none exists
-        admin = User.query.filter_by(username='admin').first()
+        admin = User.query.filter_by(username='rabi').first()
         if not admin:
-            admin = User(username='admin', role='admin')
-            admin.set_password('admin123')  # Change this password in production!
+            admin = User(username='rabi', role='admin')
+            admin.set_password('rabi123')  # Changed default admin credentials
             db.session.add(admin)
             db.session.commit()
             print("Admin user created!")
