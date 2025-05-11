@@ -317,12 +317,12 @@ def settings():
             settings = Settings()
             db.session.add(settings)
         
-        settings.company_name = request.form['company_name']
-        settings.address = request.form['address']
-        settings.phone = request.form['phone']
-        settings.email = request.form['email']
-        settings.gstin = request.form['gstin']
-        settings.website = request.form['website']
+        settings.company_name = request.form.get('company_name', '')
+        settings.address = request.form.get('address', '')
+        settings.phone = request.form.get('phone', '')
+        settings.email = request.form.get('email', '')
+        settings.gstin = request.form.get('gstin', '')
+        settings.website = request.form.get('website', '')
         
         db.session.commit()
         flash('Settings updated successfully!', 'success')
