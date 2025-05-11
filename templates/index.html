@@ -138,7 +138,7 @@
                                     <th>Description</th>
                                     <th>Price</th>
                                     <th>Stock</th>
-                                    <th>Warranty (months)</th>
+                                    <th>HSN/SAC Number</th>
                                     <th>Tax Rate (%)</th>
                                     <th>Created At</th>
                                     <th>Actions</th>
@@ -161,7 +161,7 @@
                                         {% endif %}
                                         {{ item.stock }}
                                     </td>
-                                    <td>{{ item.warranty or 0 }}</td>
+                                    <td>{{ item.hsn_sac_number or '' }}</td>
                                     <td>{{ item.tax_rate or 0 }}%</td>
                                     <td>{{ item.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                                     <td>

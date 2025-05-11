@@ -62,7 +62,7 @@ class Item(db.Model):
     description = db.Column(db.String(200))
     price = db.Column(db.Float, nullable=False)
     stock = db.Column(db.Integer, nullable=False)
-    warranty = db.Column(db.Integer, nullable=True)  # months
+    hsn_sac_number = db.Column(db.String(20), nullable=True)  # HSN/SAC number
     tax_rate = db.Column(db.Float, nullable=True, default=0.0)  # percent
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -132,6 +132,8 @@ class Settings(db.Model):
     email = db.Column(db.String(100), nullable=True)
     gstin = db.Column(db.String(50), nullable=True)
     website = db.Column(db.String(200), nullable=True)
+    bank_account_number = db.Column(db.String(50), nullable=True)
+    ifsc_code = db.Column(db.String(20), nullable=True)
 
 class InventoryHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -203,9 +205,9 @@ def add_item():
         description = request.form['description']
         price = float(request.form['price'])
         stock = int(request.form['stock'])
-        warranty = int(request.form['warranty']) if request.form['warranty'] else None
+        hsn_sac_number = request.form['hsn_sac_number'] if request.form['hsn_sac_number'] else None
         tax_rate = float(request.form['tax_rate']) if request.form['tax_rate'] else 0.0
-        new_item = Item(name=name, description=description, price=price, stock=stock, warranty=warranty, tax_rate=tax_rate)
+        new_item = Item(name=name, description=description, price=price, stock=stock, hsn_sac_number=hsn_sac_number, tax_rate=tax_rate)
         db.session.add(new_item)
         db.session.commit()
         flash('Item added successfully!')
@@ -236,12 +238,12 @@ def create_bill():
         
         # Generate invoice number
         now = datetime.now()
-        month_str = now.strftime('%Y%m')
+        month_str = now.strftime('%Y-%m')
         count = Bill.query.filter(
             db.extract('year', Bill.created_at) == now.year,
             db.extract('month', Bill.created_at) == now.month
         ).count() + 1
-        invoice_number = f"{month_str}-{count:03d}"
+        invoice_number = f"SQE-{now.year}-{now.month:02d}-{count}"
         
         subtotal = 0
         total_tax = 0
@@ -323,6 +325,8 @@ def settings():
         settings.email = request.form.get('email', '')
         settings.gstin = request.form.get('gstin', '')
         settings.website = request.form.get('website', '')
+        settings.bank_account_number = request.form.get('bank_account_number', '')
+        settings.ifsc_code = request.form.get('ifsc_code', '')
         
         db.session.commit()
         flash('Settings updated successfully!', 'success')
@@ -349,33 +353,33 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     
     # Create improved styles with better typography and color scheme
     styles.add(ParagraphStyle(
-        name='CompanyHeader', fontSize=24, leading=28, alignment=1, 
-        fontName='Helvetica-Bold', spaceAfter=6, textColor=primary_color))
+        name='CompanyHeader', fontSize=20, leading=24, alignment=1, 
+        fontName='Helvetica', spaceAfter=4, textColor=primary_color))
     styles.add(ParagraphStyle(
-        name='CompanySubHeader', fontSize=10, leading=12, alignment=0, 
-        fontName='Helvetica-Bold', spaceAfter=1, textColor=secondary_color))
+        name='CompanySubHeader', fontSize=9, leading=11, alignment=0, 
+        fontName='Helvetica', spaceAfter=1, textColor=secondary_color))
     styles.add(ParagraphStyle(
-        name='NormalText', fontSize=9, leading=11, alignment=0, 
+        name='NormalText', fontSize=8, leading=10, alignment=0, 
         fontName='Helvetica', textColor=text_color))
     styles.add(ParagraphStyle(
-        name='TableHeader', fontSize=10, leading=12, alignment=1, 
-        fontName='Helvetica-Bold', textColor=colors.white))
+        name='TableHeader', fontSize=9, leading=11, alignment=1, 
+        fontName='Helvetica', textColor=colors.white))
     styles.add(ParagraphStyle(
-        name='TableCell', fontSize=9, leading=11, alignment=1, 
+        name='TableCell', fontSize=8, leading=10, alignment=1, 
         fontName='Helvetica', textColor=text_color))
     styles.add(ParagraphStyle(
-        name='Footer', fontSize=8, leading=10, alignment=1, 
+        name='Footer', fontSize=7, leading=9, alignment=1, 
         fontName='Helvetica', textColor=secondary_color))
     styles.add(ParagraphStyle(
-        name='TotalAmount', fontSize=11, leading=13, alignment=2, 
-        fontName='Helvetica-Bold', textColor=primary_color))
+        name='TotalAmount', fontSize=9, leading=11, alignment=2, 
+        fontName='Helvetica', textColor=primary_color))
     styles.add(ParagraphStyle(
-        name='BillTo', fontSize=11, leading=13, alignment=0, 
-        fontName='Helvetica-Bold', textColor=primary_color))
+        name='BillTo', fontSize=9, leading=11, alignment=0, 
+        fontName='Helvetica', textColor=primary_color))
     styles.add(ParagraphStyle(
-        name='InvoiceInfo', fontSize=10, leading=12, alignment=0, 
-        fontName='Helvetica-Bold', textColor=accent_color, 
-        borderColor=accent_color, borderWidth=1, borderPadding=5))
+        name='InvoiceInfo', fontSize=9, leading=11, alignment=0, 
+        fontName='Helvetica', textColor=accent_color, 
+        borderColor=accent_color, borderWidth=1, borderPadding=3))
     
     # Get company settings
     settings = Settings.query.first()
@@ -385,118 +389,113 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     top_banner.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (0, 0), primary_color),
         ('TEXTCOLOR', (0, 0), (0, 0), colors.white),
-        ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (0, 0), 16),
+        ('FONTNAME', (0, 0), (0, 0), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (0, 0), 14),
         ('ALIGNMENT', (0, 0), (0, 0), 'CENTER'),
         ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (0, 0), 8),
-        ('BOTTOMPADDING', (0, 0), (0, 0), 8),
+        ('TOPPADDING', (0, 0), (0, 0), 4),
+        ('BOTTOMPADDING', (0, 0), (0, 0), 4),
     ]))
     elements.append(top_banner)
-    elements.append(Spacer(1, 10))
-    
-    # Company name centered at the top
-    if settings and settings.company_name:
-        elements.append(Paragraph(settings.company_name, 
-                                 ParagraphStyle(name='CenteredCompanyName', 
-                                              fontSize=24, 
-                                              leading=28, 
-                                              alignment=1,
-                                              fontName='Helvetica-Bold', 
-                                              textColor=primary_color)))
-        elements.append(Spacer(1, 5))
-    
-    # Create a table for logo (left) and company details (right)
+    elements.append(Spacer(1, 24))  # Increased vertical space before company name
+
+    # Logo at the top left, close to the banner
     logo_path = os.path.join('static', 'logo.png')
     logo_data = None
     if os.path.exists(logo_path):
-        img = Image(logo_path, width=100, height=100)
+        img = Image(logo_path, width=80, height=80)
         logo_data = img
     else:
-        # Placeholder if no logo exists
         logo_data = Paragraph("", styles['NormalText'])
-    
-    # Company details with right alignment
+    logo_table = Table([[logo_data]], colWidths=[80])
+    logo_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('VALIGN', (0, 0), (0, 0), 'TOP'),
+        ('TOPPADDING', (0, 0), (0, 0), 0),
+        ('BOTTOMPADDING', (0, 0), (0, 0), 0),
+        ('LEFTPADDING', (0, 0), (0, 0), 0),
+        ('RIGHTPADDING', (0, 0), (0, 0), 0),
+    ]))
+    # Add a row with logo left, company name centered, empty right
+    company_name = settings.company_name if settings and settings.company_name else ""
+    company_name_para = Paragraph(company_name, ParagraphStyle(name='CenteredCompanyName', fontSize=28, leading=32, alignment=1, fontName='Helvetica-Bold', textColor=primary_color))
+    header_row = Table([[logo_data, company_name_para, ""]], colWidths=[80, 380, 80])
+    header_row.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+        ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
+        ('VALIGN', (0, 0), (2, 0), 'TOP'),
+        ('LEFTPADDING', (0, 0), (2, 0), 0),
+        ('RIGHTPADDING', (0, 0), (2, 0), 0),
+        ('TOPPADDING', (0, 0), (2, 0), 0),
+        ('BOTTOMPADDING', (0, 0), (2, 0), 0),
+    ]))
+    elements.append(header_row)
+    elements.append(Spacer(1, 8))
+
+    # Prepare customer details box (BILLED TO)
+    customer_box_data = []
+    customer_box_data.append([Paragraph("<b>BILLED TO:</b>", ParagraphStyle(name='BillToMedium', fontSize=12, leading=14, alignment=0, fontName='Helvetica-Bold', textColor=primary_color))])
+    customer_name = bill.customer.name if bill.customer else bill.customer_name
+    if customer_name:
+        customer_box_data.append([Paragraph(f"<b>{customer_name}</b>", ParagraphStyle(name='CustomerMedium', fontSize=11, leading=13, alignment=0, fontName='Helvetica-Bold', textColor=text_color))])
+    if bill.mobile_number:
+        customer_box_data.append([Paragraph(f"Phone: {bill.mobile_number}", ParagraphStyle(name='CustomerMedium', fontSize=10, leading=12, alignment=0, fontName='Helvetica', textColor=text_color))])
+    if bill.email:
+        customer_box_data.append([Paragraph(f"Email: {bill.email}", ParagraphStyle(name='CustomerMedium', fontSize=10, leading=12, alignment=0, fontName='Helvetica', textColor=text_color))])
+    if bill.address:
+        customer_box_data.append([Paragraph(f"Address: {bill.address}", ParagraphStyle(name='CustomerMedium', fontSize=10, leading=12, alignment=0, fontName='Helvetica', textColor=text_color))])
+    if bill.gstin:
+        customer_box_data.append([Paragraph(f"GSTIN: {bill.gstin}", ParagraphStyle(name='CustomerMedium', fontSize=10, leading=12, alignment=0, fontName='Helvetica', textColor=text_color))])
+    customer_box = Table(customer_box_data, colWidths=[180])
+    customer_box.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1, primary_color),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+
+    # Company details box (already compact)
     company_details_content = []
+    company_details_content.append(Paragraph("<b>SELLER'S DETAILS</b>", ParagraphStyle(name='SellerDetailsHeader', fontSize=11, leading=13, alignment=0, fontName='Helvetica-Bold', textColor=primary_color)))
     if settings:
         if settings.address:
-            company_details_content.append(Paragraph(settings.address, styles['CompanySubHeader']))
+            company_details_content.append(Paragraph(f"<b>Address:</b> {settings.address}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
         if settings.phone:
-            company_details_content.append(Paragraph(f"Tel: {settings.phone}", styles['CompanySubHeader']))
+            company_details_content.append(Paragraph(f"<b>Tel:</b> {settings.phone}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
         if settings.email:
-            company_details_content.append(Paragraph(f"Email: {settings.email}", styles['CompanySubHeader']))
+            company_details_content.append(Paragraph(f"<b>Email:</b> {settings.email}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
         if settings.gstin:
-            company_details_content.append(Paragraph(f"GSTIN: {settings.gstin}", styles['CompanySubHeader']))
-    
-    # Create company details as a separate table to ensure proper alignment
+            company_details_content.append(Paragraph(f"<b>GSTIN:</b> {settings.gstin}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
+        if settings.bank_account_number:
+            company_details_content.append(Paragraph(f"<b>Acc No:</b> {settings.bank_account_number}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
+        if settings.ifsc_code:
+            company_details_content.append(Paragraph(f"<b>IFSC:</b> {settings.ifsc_code}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
     company_details_data = [[detail] for detail in company_details_content]
-    if not company_details_data:  # If no company details, add an empty row
+    if not company_details_data:
         company_details_data = [[""]]
     company_details = Table(company_details_data, colWidths=[300])
     company_details.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
         ('VALIGN', (0, 0), (0, -1), 'MIDDLE'),
+        ('BOX', (0, 0), (-1, -1), 1, primary_color),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
     ]))
-    
-    # Create header with logo on left and company details on right
-    header_data = [[logo_data, company_details]]
-    header_table = Table(header_data, colWidths=[150, 390])
-    header_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, 0), 'LEFT'),  # Left align logo
-        ('ALIGN', (1, 0), (1, 0), 'CENTER'),  # Center align company details
-        ('VALIGN', (0, 0), (1, 0), 'MIDDLE'),
-        ('RIGHTPADDING', (0, 0), (0, 0), 10),  # Add padding between logo and details
-    ]))
-    elements.append(header_table)
-    elements.append(Spacer(1, 20))
-    
-    # Two-column layout for bill-to and invoice info arranged like the example
-    # Left side: Bill To information
-    elements.append(Paragraph("BILLED TO:", styles['BillTo']))
-    elements.append(Spacer(1, 5))
-    
-    customer_name = bill.customer.name if bill.customer else bill.customer_name
-    if customer_name:
-        elements.append(Paragraph(f"<b>{customer_name}</b>", styles['NormalText']))
-    
-    # Right side: Invoice information in a box with orange border
+
+    # Invoice info box (orange border)
     invoice_date = bill.created_at.strftime('%d/%m/%Y')
     invoice_number = bill.invoice_number
-    
-    # Create two rows side by side
-    bill_to_data = []
     invoice_data = [
-        [Paragraph(f"<b>INVOICE #{invoice_number}</b>", 
-                  ParagraphStyle(name='InvoiceLabel', 
-                               fontSize=11, 
-                               leading=13, 
-                               alignment=0, 
-                               fontName='Helvetica-Bold', 
-                               textColor=accent_color))],
+        [Paragraph(f"<b>INVOICE #{invoice_number}</b>", ParagraphStyle(name='InvoiceLabel', fontSize=11, leading=13, alignment=0, fontName='Helvetica-Bold', textColor=accent_color))],
         [Paragraph(f"Date: {invoice_date}", styles['NormalText'])],
         [Paragraph(f"Payment Mode: {bill.payment_mode}", styles['NormalText'])]
     ]
-    
-    # Customer info
-    customer_info = []
-    if bill.mobile_number:
-        customer_info.append(Paragraph(f"Phone: {bill.mobile_number}", styles['NormalText']))
-    if bill.email:
-        customer_info.append(Paragraph(f"Email: {bill.email}", styles['NormalText']))
-    if bill.address:
-        customer_info.append(Paragraph(f"Address: {bill.address}", styles['NormalText']))
-    if bill.gstin:
-        customer_info.append(Paragraph(f"GSTIN: {bill.gstin}", styles['NormalText']))
-    
-    # Create empty cells to add space for customer info side
-    for i in range(len(customer_info)):
-        bill_to_data.append([customer_info[i]])
-    
-    # Add more empty rows to match invoice_data length if needed
-    while len(bill_to_data) < len(invoice_data):
-        bill_to_data.append([''])
-    
-    # Create invoice box
     invoice_box = Table(invoice_data, colWidths=[300])
     invoice_box.setStyle(TableStyle([
         ('BOX', (0, 0), (-1, -1), 1, accent_color),
@@ -504,35 +503,39 @@ def generate_bill_pdf(bill, subtotal, total_tax):
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('LEFTPADDING', (0, 0), (-1, -1), 10),
         ('RIGHTPADDING', (0, 0), (-1, -1), 10),
-        ('TOPPADDING', (0, 0), (-1, -1), 5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
     ]))
-    
-    # Create customer info boxes
-    customer_box = Table(bill_to_data, colWidths=[250])
-    customer_box.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('TOPPADDING', (0, 0), (-1, -1), 1),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+
+    # Company details and invoice info stacked, as before
+    stacked_boxes = Table([[company_details], [invoice_box]], colWidths=[300])
+    stacked_boxes.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+        ('VALIGN', (0, 0), (0, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (0, 0), 0),
+        ('BOTTOMPADDING', (0, 0), (0, 0), 2),
+        ('TOPPADDING', (0, 1), (0, 1), 2),
+        ('BOTTOMPADDING', (0, 1), (0, 1), 0),
     ]))
-    
-    # Add the two sections side by side
-    info_row = [[customer_box, invoice_box]]
-    info_table = Table(info_row, colWidths=[250, 300])
-    info_table.setStyle(TableStyle([
+
+    # Place customer box left, stacked boxes right, both close to logo
+    info_row = Table([[customer_box, stacked_boxes]], colWidths=[190, 320])
+    info_row.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, 0), 'LEFT'),
         ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('VALIGN', (0, 0), (1, 0), 'TOP'),
+        ('LEFTPADDING', (0, 0), (1, 0), 0),
+        ('RIGHTPADDING', (0, 0), (1, 0), 0),
+        ('TOPPADDING', (0, 0), (1, 0), 0),
+        ('BOTTOMPADDING', (0, 0), (1, 0), 0),
     ]))
-    elements.append(info_table)
-    elements.append(Spacer(1, 15))
-    
+    elements.append(info_row)
+    elements.append(Spacer(1, 10))
+
     # Enhanced Items Table with styling that matches the example
     data = [
         [Paragraph('Item Description', styles['TableHeader']),
+         Paragraph('HSN/SAC', styles['TableHeader']),
          Paragraph('Qty', styles['TableHeader']),
          Paragraph('Unit Price', styles['TableHeader']),
          Paragraph('Tax %', styles['TableHeader']),
@@ -566,6 +569,7 @@ def generate_bill_pdf(bill, subtotal, total_tax):
         # Removed the ■ symbol from the price display
         data.append([
             Paragraph(item.item.name, styles['TableCell']),
+            Paragraph(item.item.hsn_sac_number or '', styles['TableCell']),
             Paragraph(str(item.quantity), styles['TableCell']),
             Paragraph(f"{item.price:.2f}", styles['TableCell']),
             Paragraph(f"{item_tax:.1f}%", styles['TableCell']),
@@ -578,33 +582,33 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     
     # Add subtotal, tax and total rows matching the example - removed the ■ symbol
     data.extend([
-        ['', '', '', '', Paragraph('Subtotal:', styles['TableCell']), Paragraph(f"{subtotal:.2f}", styles['TotalAmount'])],
-        ['', '', '', '', Paragraph('Total Tax:', styles['TableCell']), Paragraph(f"{total_tax:.2f}", styles['TotalAmount'])],
-        ['', '', '', '', Paragraph('TOTAL:', styles['TableHeader']), Paragraph(f"{bill.total_amount:.2f}", styles['TotalAmount'])]
+        ['', '', '', '', '', Paragraph('Subtotal:', styles['TableCell']), Paragraph(f"{subtotal:.2f}", styles['TotalAmount'])],
+        ['', '', '', '', '', Paragraph('Total Tax:', styles['TableCell']), Paragraph(f"{total_tax:.2f}", styles['TotalAmount'])],
+        ['', '', '', '', '', Paragraph('TOTAL:', styles['TableHeader']), Paragraph(f"{bill.total_amount:.2f}", styles['TotalAmount'])]
     ])
     
     # Add styling for total rows
     row_style_list.extend([
-        ('BACKGROUND', (4, total_row_index), (5, total_row_index), colors.white),
-        ('BACKGROUND', (4, total_row_index+1), (5, total_row_index+1), colors.white),
-        ('BACKGROUND', (4, total_row_index+2), (5, total_row_index+2), accent_color),
-        ('TEXTCOLOR', (4, total_row_index+2), (4, total_row_index+2), colors.white),
+        ('BACKGROUND', (5, total_row_index), (6, total_row_index), colors.white),
+        ('BACKGROUND', (5, total_row_index+1), (6, total_row_index+1), colors.white),
+        ('BACKGROUND', (5, total_row_index+2), (6, total_row_index+2), accent_color),
         ('TEXTCOLOR', (5, total_row_index+2), (5, total_row_index+2), colors.white),
-        ('SPAN', (0, total_row_index), (3, total_row_index)),
-        ('SPAN', (0, total_row_index+1), (3, total_row_index+1)),
-        ('SPAN', (0, total_row_index+2), (3, total_row_index+2)),
-        ('ALIGN', (4, total_row_index), (4, total_row_index+2), 'RIGHT'),
+        ('TEXTCOLOR', (6, total_row_index+2), (6, total_row_index+2), colors.white),
+        ('SPAN', (0, total_row_index), (4, total_row_index)),
+        ('SPAN', (0, total_row_index+1), (4, total_row_index+1)),
+        ('SPAN', (0, total_row_index+2), (4, total_row_index+2)),
         ('ALIGN', (5, total_row_index), (5, total_row_index+2), 'RIGHT'),
-        ('LINEABOVE', (4, total_row_index), (5, total_row_index), 0.5, colors.black),
+        ('ALIGN', (6, total_row_index), (6, total_row_index+2), 'RIGHT'),
+        ('LINEABOVE', (5, total_row_index), (6, total_row_index), 0.5, colors.black),
     ])
     
     # Create and style the table with more space - increased height
     # Adjust column widths to use more of the available space
-    table = Table(data, colWidths=[220, 50, 70, 50, 70, 120])
+    table = Table(data, colWidths=[150, 70, 50, 70, 50, 70, 120])
     table.setStyle(TableStyle(row_style_list + [
         # Add more height to each row
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 10),  # Increased bottom padding
-        ('TOPPADDING', (0, 1), (-1, -1), 10),     # Increased top padding
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),  # Reduced bottom padding
+        ('TOPPADDING', (0, 1), (-1, -1), 6),     # Reduced top padding
     ]))
     elements.append(table)
     elements.append(Spacer(1, 20))
@@ -614,26 +618,26 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     
     terms = Paragraph(terms_text, 
                      ParagraphStyle(name='CompactTerms', 
-                                   fontSize=7, 
-                                   leading=9, 
+                                   fontSize=6, 
+                                   leading=8, 
                                    alignment=0, 
                                    fontName='Helvetica', 
                                    textColor=secondary_color))
     elements.append(terms)
-    elements.append(Spacer(1, 5))
+    elements.append(Spacer(1, 3))
     
     # Thank you message matching the example
     thank_you = Table([
         [Paragraph("THANK YOU FOR YOUR BUSINESS!", 
-                   ParagraphStyle(name='ThankYou', fontSize=12, alignment=1, 
-                                 textColor=primary_color, fontName='Helvetica-Bold'))],
+                   ParagraphStyle(name='ThankYou', fontSize=10, alignment=1, 
+                                 textColor=primary_color, fontName='Helvetica'))],
     ], colWidths=[540])
     
     thank_you.setStyle(TableStyle([
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-        ('TOPPADDING', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
     ]))
     elements.append(thank_you)
     
@@ -742,7 +746,7 @@ def edit_item(id):
             'description': item.description,
             'price': item.price,
             'stock': item.stock,
-            'warranty': item.warranty,
+            'hsn_sac_number': item.hsn_sac_number,
             'tax_rate': item.tax_rate
         }
         
@@ -751,7 +755,7 @@ def edit_item(id):
         item.description = request.form['description']
         item.price = float(request.form['price'])
         item.stock = int(request.form['stock'])
-        item.warranty = int(request.form['warranty']) if request.form['warranty'] else None
+        item.hsn_sac_number = request.form['hsn_sac_number'] if request.form['hsn_sac_number'] else None
         item.tax_rate = float(request.form['tax_rate']) if request.form['tax_rate'] else 0.0
         
         # Store new values
@@ -760,7 +764,7 @@ def edit_item(id):
             'description': item.description,
             'price': item.price,
             'stock': item.stock,
-            'warranty': item.warranty,
+            'hsn_sac_number': item.hsn_sac_number,
             'tax_rate': item.tax_rate
         }
         
@@ -803,7 +807,19 @@ def quotations():
             customer_id = new_customer.id
         else:
             customer_id = request.form.get('customer_id')
-        valid_until = datetime.strptime(request.form.get('valid_until'), '%Y-%m-%d')
+            
+        # Handle date format
+        valid_until_str = request.form.get('valid_until')
+        try:
+            # Try DD/MM/YYYY format first
+            valid_until = datetime.strptime(valid_until_str, '%d/%m/%Y')
+        except ValueError:
+            try:
+                # Try YYYY-MM-DD format
+                valid_until = datetime.strptime(valid_until_str, '%Y-%m-%d')
+            except ValueError:
+                flash('Invalid date format. Please use DD/MM/YYYY or YYYY-MM-DD', 'error')
+                return redirect(url_for('quotations'))
         items = request.form.getlist('items[]')
         quantities = request.form.getlist('quantities[]')
         prices = request.form.getlist('prices[]')
@@ -891,152 +907,163 @@ def quotations():
 
 def generate_quotation_pdf(quotation, subtotal, total_tax):
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=20, leftMargin=40, topMargin=20, bottomMargin=20)
+    # Use slightly smaller margins to match example
+    doc = SimpleDocTemplate(buffer, pagesize=letter, 
+                           rightMargin=20, leftMargin=40, 
+                           topMargin=20, bottomMargin=20)
     elements = []
     styles = getSampleStyleSheet()
-
-    # Color scheme to match bill PDF
-    primary_color = colors.HexColor('#1A8CFF')    # Bright blue
+    
+    # Color scheme to match example
+    primary_color = colors.HexColor('#1A8CFF')    # Bright blue (matches example)
     secondary_color = colors.HexColor('#424242')  # Dark gray
-    accent_color = colors.HexColor('#FF9900')     # Orange for totals
+    accent_color = colors.HexColor('#FF9900')     # Orange for totals (matches example)
     light_bg = colors.HexColor('#F5F5F5')         # Light gray background
     text_color = colors.HexColor('#212121')       # Near black for text
-
-    # Styles
+    
+    # Create improved styles with better typography and color scheme
     styles.add(ParagraphStyle(
-        name='CompanyHeader', fontSize=24, leading=28, alignment=1,
-        fontName='Helvetica-Bold', spaceAfter=6, textColor=primary_color))
+        name='CompanyHeader', fontSize=20, leading=24, alignment=1, 
+        fontName='Helvetica', spaceAfter=4, textColor=primary_color))
     styles.add(ParagraphStyle(
-        name='CompanySubHeader', fontSize=10, leading=12, alignment=0,
-        fontName='Helvetica-Bold', spaceAfter=1, textColor=secondary_color))
+        name='CompanySubHeader', fontSize=9, leading=11, alignment=0, 
+        fontName='Helvetica', spaceAfter=1, textColor=secondary_color))
     styles.add(ParagraphStyle(
-        name='NormalText', fontSize=9, leading=11, alignment=0,
+        name='NormalText', fontSize=8, leading=10, alignment=0, 
         fontName='Helvetica', textColor=text_color))
     styles.add(ParagraphStyle(
-        name='TableHeader', fontSize=10, leading=12, alignment=1,
-        fontName='Helvetica-Bold', textColor=colors.white))
+        name='TableHeader', fontSize=9, leading=11, alignment=1, 
+        fontName='Helvetica', textColor=colors.white))
     styles.add(ParagraphStyle(
-        name='TableCell', fontSize=9, leading=11, alignment=1,
+        name='TableCell', fontSize=8, leading=10, alignment=1, 
         fontName='Helvetica', textColor=text_color))
     styles.add(ParagraphStyle(
-        name='Footer', fontSize=8, leading=10, alignment=1,
+        name='Footer', fontSize=7, leading=9, alignment=1, 
         fontName='Helvetica', textColor=secondary_color))
     styles.add(ParagraphStyle(
-        name='TotalAmount', fontSize=11, leading=13, alignment=2,
-        fontName='Helvetica-Bold', textColor=primary_color))
+        name='TotalAmount', fontSize=9, leading=11, alignment=2, 
+        fontName='Helvetica', textColor=primary_color))
     styles.add(ParagraphStyle(
-        name='BillTo', fontSize=11, leading=13, alignment=0,
-        fontName='Helvetica-Bold', textColor=primary_color))
+        name='BillTo', fontSize=9, leading=11, alignment=0, 
+        fontName='Helvetica', textColor=primary_color))
     styles.add(ParagraphStyle(
-        name='InvoiceInfo', fontSize=10, leading=12, alignment=0,
-        fontName='Helvetica-Bold', textColor=accent_color,
-        borderColor=accent_color, borderWidth=1, borderPadding=5))
-
+        name='InvoiceInfo', fontSize=9, leading=11, alignment=0, 
+        fontName='Helvetica', textColor=accent_color, 
+        borderColor=accent_color, borderWidth=1, borderPadding=3))
+    
     # Get company settings
     settings = Settings.query.first()
-
+    
     # Add a decorative banner at the top
     top_banner = Table([['QUOTATION']], colWidths=[540])
     top_banner.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (0, 0), primary_color),
         ('TEXTCOLOR', (0, 0), (0, 0), colors.white),
-        ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (0, 0), 16),
+        ('FONTNAME', (0, 0), (0, 0), 'Helvetica'),
+        ('FONTSIZE', (0, 0), (0, 0), 14),
         ('ALIGNMENT', (0, 0), (0, 0), 'CENTER'),
         ('VALIGN', (0, 0), (0, 0), 'MIDDLE'),
-        ('TOPPADDING', (0, 0), (0, 0), 8),
-        ('BOTTOMPADDING', (0, 0), (0, 0), 8),
+        ('TOPPADDING', (0, 0), (0, 0), 4),
+        ('BOTTOMPADDING', (0, 0), (0, 0), 4),
     ]))
     elements.append(top_banner)
-    elements.append(Spacer(1, 10))
+    elements.append(Spacer(1, 24))  # Increased vertical space before company name
 
-    # Company name centered at the top
-    if settings and settings.company_name:
-        elements.append(Paragraph(settings.company_name,
-                                 ParagraphStyle(name='CenteredCompanyName',
-                                              fontSize=24,
-                                              leading=28,
-                                              alignment=1,
-                                              fontName='Helvetica-Bold',
-                                              textColor=primary_color)))
-        elements.append(Spacer(1, 5))
-
-    # Create a table for logo (left) and company details (right)
+    # Logo at the top left, close to the banner
     logo_path = os.path.join('static', 'logo.png')
     logo_data = None
     if os.path.exists(logo_path):
-        img = Image(logo_path, width=100, height=100)
+        img = Image(logo_path, width=80, height=80)
         logo_data = img
     else:
         logo_data = Paragraph("", styles['NormalText'])
+    logo_table = Table([[logo_data]], colWidths=[80])
+    logo_table.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('VALIGN', (0, 0), (0, 0), 'TOP'),
+        ('TOPPADDING', (0, 0), (0, 0), 0),
+        ('BOTTOMPADDING', (0, 0), (0, 0), 0),
+        ('LEFTPADDING', (0, 0), (0, 0), 0),
+        ('RIGHTPADDING', (0, 0), (0, 0), 0),
+    ]))
+    # Add a row with logo left, company name centered, empty right
+    company_name = settings.company_name if settings and settings.company_name else ""
+    company_name_para = Paragraph(company_name, ParagraphStyle(name='CenteredCompanyName', fontSize=28, leading=32, alignment=1, fontName='Helvetica-Bold', textColor=primary_color))
+    header_row = Table([[logo_data, company_name_para, ""]], colWidths=[80, 380, 80])
+    header_row.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
+        ('ALIGN', (1, 0), (1, 0), 'CENTER'),
+        ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
+        ('VALIGN', (0, 0), (2, 0), 'TOP'),
+        ('LEFTPADDING', (0, 0), (2, 0), 0),
+        ('RIGHTPADDING', (0, 0), (2, 0), 0),
+        ('TOPPADDING', (0, 0), (2, 0), 0),
+        ('BOTTOMPADDING', (0, 0), (2, 0), 0),
+    ]))
+    elements.append(header_row)
+    elements.append(Spacer(1, 8))
 
+    # Prepare customer details box (QUOTED TO)
+    customer_box_data = []
+    customer_box_data.append([Paragraph("<b>QUOTED TO:</b>", ParagraphStyle(name='BillToMedium', fontSize=12, leading=14, alignment=0, fontName='Helvetica-Bold', textColor=primary_color))])
+    customer_name = quotation.customer.name if quotation.customer else quotation.customer_name
+    if customer_name:
+        customer_box_data.append([Paragraph(f"<b>{customer_name}</b>", ParagraphStyle(name='CustomerMedium', fontSize=11, leading=13, alignment=0, fontName='Helvetica-Bold', textColor=text_color))])
+    if quotation.mobile_number:
+        customer_box_data.append([Paragraph(f"Phone: {quotation.mobile_number}", ParagraphStyle(name='CustomerMedium', fontSize=10, leading=12, alignment=0, fontName='Helvetica', textColor=text_color))])
+    if quotation.email:
+        customer_box_data.append([Paragraph(f"Email: {quotation.email}", ParagraphStyle(name='CustomerMedium', fontSize=10, leading=12, alignment=0, fontName='Helvetica', textColor=text_color))])
+    if quotation.address:
+        customer_box_data.append([Paragraph(f"Address: {quotation.address}", ParagraphStyle(name='CustomerMedium', fontSize=10, leading=12, alignment=0, fontName='Helvetica', textColor=text_color))])
+    if quotation.gstin:
+        customer_box_data.append([Paragraph(f"GSTIN: {quotation.gstin}", ParagraphStyle(name='CustomerMedium', fontSize=10, leading=12, alignment=0, fontName='Helvetica', textColor=text_color))])
+    customer_box = Table(customer_box_data, colWidths=[180])
+    customer_box.setStyle(TableStyle([
+        ('BOX', (0, 0), (-1, -1), 1, primary_color),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 8),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+
+    # Company details box
     company_details_content = []
+    company_details_content.append(Paragraph("<b>SELLER'S DETAILS</b>", ParagraphStyle(name='SellerDetailsHeader', fontSize=11, leading=13, alignment=0, fontName='Helvetica-Bold', textColor=primary_color)))
     if settings:
         if settings.address:
-            company_details_content.append(Paragraph(settings.address, styles['CompanySubHeader']))
+            company_details_content.append(Paragraph(f"<b>Address:</b> {settings.address}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
         if settings.phone:
-            company_details_content.append(Paragraph(f"Tel: {settings.phone}", styles['CompanySubHeader']))
+            company_details_content.append(Paragraph(f"<b>Tel:</b> {settings.phone}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
         if settings.email:
-            company_details_content.append(Paragraph(f"Email: {settings.email}", styles['CompanySubHeader']))
+            company_details_content.append(Paragraph(f"<b>Email:</b> {settings.email}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
         if settings.gstin:
-            company_details_content.append(Paragraph(f"GSTIN: {settings.gstin}", styles['CompanySubHeader']))
-
+            company_details_content.append(Paragraph(f"<b>GSTIN:</b> {settings.gstin}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
+        if settings.bank_account_number:
+            company_details_content.append(Paragraph(f"<b>Acc No:</b> {settings.bank_account_number}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
+        if settings.ifsc_code:
+            company_details_content.append(Paragraph(f"<b>IFSC:</b> {settings.ifsc_code}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
     company_details_data = [[detail] for detail in company_details_content]
     if not company_details_data:
         company_details_data = [[""]]
     company_details = Table(company_details_data, colWidths=[300])
     company_details.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
         ('VALIGN', (0, 0), (0, -1), 'MIDDLE'),
+        ('BOX', (0, 0), (-1, -1), 1, primary_color),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
     ]))
 
-    header_data = [[logo_data, company_details]]
-    header_table = Table(header_data, colWidths=[150, 390])
-    header_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-        ('ALIGN', (1, 0), (1, 0), 'CENTER'),
-        ('VALIGN', (0, 0), (1, 0), 'MIDDLE'),
-        ('RIGHTPADDING', (0, 0), (0, 0), 10),
-    ]))
-    elements.append(header_table)
-    elements.append(Spacer(1, 20))
-
-    # Two-column layout for customer and quotation info
-    elements.append(Paragraph("QUOTED TO:", styles['BillTo']))
-    elements.append(Spacer(1, 5))
-
-    customer_name = quotation.customer.name if quotation.customer else quotation.customer_name
-    if customer_name:
-        elements.append(Paragraph(f"<b>{customer_name}</b>", styles['NormalText']))
-
+    # Quotation info box (orange border)
     quotation_date = quotation.created_at.strftime('%d/%m/%Y')
     quotation_number = quotation.quotation_number
     valid_until = quotation.valid_until.strftime('%d/%m/%Y')
-
-    customer_info = []
-    if quotation.mobile_number:
-        customer_info.append(Paragraph(f"Phone: {quotation.mobile_number}", styles['NormalText']))
-    if quotation.email:
-        customer_info.append(Paragraph(f"Email: {quotation.email}", styles['NormalText']))
-    if quotation.address:
-        customer_info.append(Paragraph(f"Address: {quotation.address}", styles['NormalText']))
-    if quotation.gstin:
-        customer_info.append(Paragraph(f"GSTIN: {quotation.gstin}", styles['NormalText']))
-
-    quote_to_data = []
-    for i in range(len(customer_info)):
-        quote_to_data.append([customer_info[i]])
-    while len(quote_to_data) < 3:
-        quote_to_data.append([''])
-
     quotation_data = [
-        [Paragraph(f"<b>QUOTATION #{quotation_number}</b>",
-                  ParagraphStyle(name='QuotationLabel',
-                               fontSize=11,
-                               leading=13,
-                               alignment=0,
-                               fontName='Helvetica-Bold',
-                               textColor=accent_color))],
+        [Paragraph(f"<b>QUOTATION #{quotation_number}</b>", ParagraphStyle(name='InvoiceLabel', fontSize=11, leading=13, alignment=0, fontName='Helvetica-Bold', textColor=accent_color))],
         [Paragraph(f"Date: {quotation_date}", styles['NormalText'])],
         [Paragraph(f"Valid Until: {valid_until}", styles['NormalText'])]
     ]
@@ -1047,129 +1074,147 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('LEFTPADDING', (0, 0), (-1, -1), 10),
         ('RIGHTPADDING', (0, 0), (-1, -1), 10),
-        ('TOPPADDING', (0, 0), (-1, -1), 5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
     ]))
-    customer_box = Table(quote_to_data, colWidths=[250])
-    customer_box.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
-        ('TOPPADDING', (0, 0), (-1, -1), 1),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 1),
+
+    # Company details and quotation info stacked
+    stacked_boxes = Table([[company_details], [quotation_box]], colWidths=[300])
+    stacked_boxes.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
+        ('VALIGN', (0, 0), (0, -1), 'TOP'),
+        ('TOPPADDING', (0, 0), (0, 0), 0),
+        ('BOTTOMPADDING', (0, 0), (0, 0), 2),
+        ('TOPPADDING', (0, 1), (0, 1), 2),
+        ('BOTTOMPADDING', (0, 1), (0, 1), 0),
     ]))
-    info_row = [[customer_box, quotation_box]]
-    info_table = Table(info_row, colWidths=[250, 300])
-    info_table.setStyle(TableStyle([
+
+    # Place customer box left, stacked boxes right
+    info_row = Table([[customer_box, stacked_boxes]], colWidths=[190, 320])
+    info_row.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, 0), 'LEFT'),
         ('ALIGN', (1, 0), (1, 0), 'RIGHT'),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('VALIGN', (0, 0), (1, 0), 'TOP'),
+        ('LEFTPADDING', (0, 0), (1, 0), 0),
+        ('RIGHTPADDING', (0, 0), (1, 0), 0),
+        ('TOPPADDING', (0, 0), (1, 0), 0),
+        ('BOTTOMPADDING', (0, 0), (1, 0), 0),
     ]))
-    elements.append(info_table)
-    elements.append(Spacer(1, 15))
+    elements.append(info_row)
+    elements.append(Spacer(1, 10))
 
-    # Items Table
+    # Enhanced Items Table with styling that matches the example
     data = [
         [Paragraph('Item Description', styles['TableHeader']),
+         Paragraph('HSN/SAC', styles['TableHeader']),
          Paragraph('Qty', styles['TableHeader']),
          Paragraph('Unit Price', styles['TableHeader']),
          Paragraph('Tax %', styles['TableHeader']),
          Paragraph('Tax Amt', styles['TableHeader']),
          Paragraph('Total', styles['TableHeader'])]
     ]
+    
+    # Alternate row colors for better readability
+    row_colors = [light_bg, colors.white]
     row_style_list = [
         ('BACKGROUND', (0, 0), (-1, 0), primary_color),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.lightgrey),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),  # Left align item description
+        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),  # Center align all other columns
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
         ('TOPPADDING', (0, 0), (-1, 0), 6),
     ]
-
-    # Add items to the table
+    
+    # Add row data with alternating colors
     for i, item in enumerate(quotation.items):
         item_tax = item.tax_rate or 0
         tax_amount = item.price * item.quantity * item_tax / 100
         total = item.price * item.quantity + tax_amount
         
+        # Add alternating row colors
         if i % 2 == 0:
             row_style_list.append(('BACKGROUND', (0, i+1), (-1, i+1), light_bg))
         
         data.append([
             Paragraph(item.item.name, styles['TableCell']),
+            Paragraph(item.item.hsn_sac_number or '', styles['TableCell']),
             Paragraph(str(item.quantity), styles['TableCell']),
             Paragraph(f"{item.price:.2f}", styles['TableCell']),
             Paragraph(f"{item_tax:.1f}%", styles['TableCell']),
             Paragraph(f"{tax_amount:.2f}", styles['TableCell']),
             Paragraph(f"{total:.2f}", styles['TableCell'])
         ])
-
-    # Add total rows
+    
+    # Calculate total rows index
     total_row_index = len(data)
+    
+    # Add subtotal, tax and total rows matching the example
     data.extend([
-        ['', '', '', '', Paragraph('Subtotal:', styles['TableCell']), Paragraph(f"{subtotal:.2f}", styles['TotalAmount'])],
-        ['', '', '', '', Paragraph('Total Tax:', styles['TableCell']), Paragraph(f"{total_tax:.2f}", styles['TotalAmount'])],
-        ['', '', '', '', Paragraph('TOTAL:', styles['TableHeader']), Paragraph(f"{quotation.total_amount:.2f}", styles['TotalAmount'])]
+        ['', '', '', '', '', Paragraph('Subtotal:', styles['TableCell']), Paragraph(f"{subtotal:.2f}", styles['TotalAmount'])],
+        ['', '', '', '', '', Paragraph('Total Tax:', styles['TableCell']), Paragraph(f"{total_tax:.2f}", styles['TotalAmount'])],
+        ['', '', '', '', '', Paragraph('TOTAL:', styles['TableHeader']), Paragraph(f"{quotation.total_amount:.2f}", styles['TotalAmount'])]
     ])
-
+    
     # Add styling for total rows
     row_style_list.extend([
-        ('BACKGROUND', (4, total_row_index), (5, total_row_index), colors.white),
-        ('BACKGROUND', (4, total_row_index+1), (5, total_row_index+1), colors.white),
-        ('BACKGROUND', (4, total_row_index+2), (5, total_row_index+2), accent_color),
-        ('TEXTCOLOR', (4, total_row_index+2), (4, total_row_index+2), colors.white),
+        ('BACKGROUND', (5, total_row_index), (6, total_row_index), colors.white),
+        ('BACKGROUND', (5, total_row_index+1), (6, total_row_index+1), colors.white),
+        ('BACKGROUND', (5, total_row_index+2), (6, total_row_index+2), accent_color),
         ('TEXTCOLOR', (5, total_row_index+2), (5, total_row_index+2), colors.white),
-        ('SPAN', (0, total_row_index), (3, total_row_index)),
-        ('SPAN', (0, total_row_index+1), (3, total_row_index+1)),
-        ('SPAN', (0, total_row_index+2), (3, total_row_index+2)),
-        ('ALIGN', (4, total_row_index), (4, total_row_index+2), 'RIGHT'),
+        ('TEXTCOLOR', (6, total_row_index+2), (6, total_row_index+2), colors.white),
+        ('SPAN', (0, total_row_index), (4, total_row_index)),
+        ('SPAN', (0, total_row_index+1), (4, total_row_index+1)),
+        ('SPAN', (0, total_row_index+2), (4, total_row_index+2)),
         ('ALIGN', (5, total_row_index), (5, total_row_index+2), 'RIGHT'),
-        ('LINEABOVE', (4, total_row_index), (5, total_row_index), 0.5, colors.black),
+        ('ALIGN', (6, total_row_index), (6, total_row_index+2), 'RIGHT'),
+        ('LINEABOVE', (5, total_row_index), (6, total_row_index), 0.5, colors.black),
     ])
-
-    # Create and style the table
-    table = Table(data, colWidths=[220, 50, 70, 50, 70, 120])
+    
+    # Create and style the table with more space
+    table = Table(data, colWidths=[150, 70, 50, 70, 50, 70, 120])
     table.setStyle(TableStyle(row_style_list + [
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 10),
-        ('TOPPADDING', (0, 1), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('TOPPADDING', (0, 1), (-1, -1), 6),
     ]))
     elements.append(table)
     elements.append(Spacer(1, 20))
-
-    # Terms and conditions
-    terms_text = "Terms & Conditions: 1. This quotation is valid until the specified date. 2. Prices are subject to change without notice. 3. All prices are exclusive of taxes unless specified. 4. Payment terms to be discussed separately. 5. Delivery timeline to be confirmed upon order."
+    
+    # Terms and conditions in one compact line
+    terms_text = "Terms & Conditions: 1. This quotation is valid until the specified date. 2. Prices are subject to change without notice. 3. All prices are exclusive of taxes unless specified. 4. Payment terms to be discussed. 5. Subject to local jurisdiction. 6. E. & O.E."
     
     terms = Paragraph(terms_text, 
                      ParagraphStyle(name='CompactTerms', 
-                                   fontSize=7, 
-                                   leading=9, 
+                                   fontSize=6, 
+                                   leading=8, 
                                    alignment=0, 
                                    fontName='Helvetica', 
                                    textColor=secondary_color))
     elements.append(terms)
-    elements.append(Spacer(1, 5))
-
+    elements.append(Spacer(1, 3))
+    
     # Thank you message
     thank_you = Table([
-        [Paragraph("THANK YOU FOR YOUR INTEREST!", 
-                   ParagraphStyle(name='ThankYou', fontSize=12, alignment=1, 
-                                 textColor=primary_color, fontName='Helvetica-Bold'))],
+        [Paragraph("THANK YOU FOR YOUR BUSINESS!", 
+                   ParagraphStyle(name='ThankYou', fontSize=10, alignment=1, 
+                                 textColor=primary_color, fontName='Helvetica'))],
     ], colWidths=[540])
     
     thank_you.setStyle(TableStyle([
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 10),
-        ('TOPPADDING', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
     ]))
     elements.append(thank_you)
-
-    # Footer
+    
+    # Very minimal footer
     elements.append(Spacer(1, 5))
+    
+    # Simple footer text centered with smaller font
     footer_text = "This is a computer generated quotation, no signature required."
+    
     footer = Paragraph(footer_text, 
                       ParagraphStyle(name='MinimalFooter', 
                                     fontSize=6, 
@@ -1178,7 +1223,7 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
                                     fontName='Helvetica', 
                                     textColor=secondary_color))
     elements.append(footer)
-
+    
     # Build the PDF
     doc.build(elements)
     buffer.seek(0)
@@ -1260,14 +1305,14 @@ def export_inventory():
     items = Item.query.order_by(Item.name).all()
     si = StringIO()
     cw = csv.writer(si)
-    cw.writerow(['Name', 'Description', 'Price', 'Stock', 'Warranty (months)', 'Tax Rate', 'Created At'])
+    cw.writerow(['Name', 'Description', 'Price', 'Stock', 'HSN/SAC Number', 'Tax Rate', 'Created At'])
     for item in items:
         cw.writerow([
             item.name,
             item.description,
             item.price,
             item.stock,
-            item.warranty,
+            item.hsn_sac_number,
             item.tax_rate,
             item.created_at.strftime('%Y-%m-%d %H:%M')
         ])
@@ -1347,4 +1392,4 @@ def recreate_database():
 
 if __name__ == '__main__':
     recreate_database()
-    app.run(debug=True, host='0.0.0.0', port=5000) 
+    app.run(debug=True, host='0.0.0.0', port=5001) 

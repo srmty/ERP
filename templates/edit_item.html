@@ -27,8 +27,8 @@
                             <input type="number" class="form-control" id="stock" name="stock" value="{{ item.stock }}" required>
                         </div>
                         <div class="mb-3">
-                            <label for="warranty" class="form-label">Warranty (months)</label>
-                            <input type="number" class="form-control" id="warranty" name="warranty" value="{{ item.warranty or 0 }}">
+                            <label for="hsn_sac_number" class="form-label">HSN/SAC Number</label>
+                            <input type="text" class="form-control" id="hsn_sac_number" name="hsn_sac_number" value="{{ item.hsn_sac_number or '' }}">
                         </div>
                         <div class="mb-3">
                             <label for="tax_rate" class="form-label">Tax Rate (%)</label>
