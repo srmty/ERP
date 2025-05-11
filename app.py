@@ -1398,6 +1398,7 @@ def recreate_database():
 
 # --- TEMPORARY: Database initialization for Render free tier ---
 with app.app_context():
+    db.drop_all()
     db.create_all()
     admin = User.query.filter_by(username='admin').first()
     if not admin:
