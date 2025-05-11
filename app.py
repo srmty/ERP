@@ -1396,6 +1396,20 @@ def recreate_database():
             db.session.commit()
             print("Admin user created!")
 
+# --- TEMPORARY: Database initialization for Render free tier ---
+with app.app_context():
+    db.create_all()
+    admin = User.query.filter_by(username='admin').first()
+    if not admin:
+        admin = User(username='admin', role='admin')
+        admin.set_password('admin123')
+        db.session.add(admin)
+        db.session.commit()
+        print("Admin user created successfully!")
+    else:
+        print("Admin user already exists!")
+# --- END TEMPORARY ---
+
 if __name__ == '__main__':
     recreate_database()
     app.run(debug=True, host='0.0.0.0', port=5001) 
