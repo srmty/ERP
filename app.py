@@ -132,6 +132,7 @@ class Settings(db.Model):
     email = db.Column(db.String(100), nullable=True)
     gstin = db.Column(db.String(50), nullable=True)
     website = db.Column(db.String(200), nullable=True)
+    bank_name = db.Column(db.String(100), nullable=True)
     bank_account_number = db.Column(db.String(50), nullable=True)
     ifsc_code = db.Column(db.String(20), nullable=True)
 
@@ -325,6 +326,7 @@ def settings():
         settings.email = request.form.get('email', '')
         settings.gstin = request.form.get('gstin', '')
         settings.website = request.form.get('website', '')
+        settings.bank_name = request.form.get('bank_name', '')
         settings.bank_account_number = request.form.get('bank_account_number', '')
         settings.ifsc_code = request.form.get('ifsc_code', '')
         
@@ -470,6 +472,8 @@ def generate_bill_pdf(bill, subtotal, total_tax):
             company_details_content.append(Paragraph(f"<b>Email:</b> {settings.email}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
         if settings.gstin:
             company_details_content.append(Paragraph(f"<b>GSTIN:</b> {settings.gstin}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
+        if settings.bank_name:
+            company_details_content.append(Paragraph(f"<b>Bank Name:</b> {settings.bank_name}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
         if settings.bank_account_number:
             company_details_content.append(Paragraph(f"<b>Acc No:</b> {settings.bank_account_number}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
         if settings.ifsc_code:
@@ -1040,6 +1044,8 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
             company_details_content.append(Paragraph(f"<b>Email:</b> {settings.email}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
         if settings.gstin:
             company_details_content.append(Paragraph(f"<b>GSTIN:</b> {settings.gstin}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
+        if settings.bank_name:
+            company_details_content.append(Paragraph(f"<b>Bank Name:</b> {settings.bank_name}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
         if settings.bank_account_number:
             company_details_content.append(Paragraph(f"<b>Acc No:</b> {settings.bank_account_number}", ParagraphStyle(name='CompanyDetailCompact', fontSize=9, leading=9, spaceAfter=0, fontName='Helvetica', textColor=secondary_color)))
         if settings.ifsc_code:
