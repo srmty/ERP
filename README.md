@@ -1,62 +1,67 @@
-# Inventory Management System
+# ERP Website
 
-A simple web-based inventory management system with billing capabilities.
+A comprehensive Enterprise Resource Planning (ERP) system built with Flask, featuring inventory management, billing, customer management, and reporting capabilities.
 
 ## Features
 
-- Add and manage inventory items
-- Track stock levels
-- Create bills with multiple items
-- Generate PDF bills
-- SQLite database for data persistence
+- User Authentication with Role-based Access Control
+- Inventory Management
+- Customer Management
+- Billing System with PDF Generation
+- Quotation Management
+- Sales Reports and Analytics
+- Data Export (CSV)
+- Settings Management
 
-## Setup
+## Tech Stack
 
-1. Create a virtual environment (recommended):
+- Python 3.x
+- Flask
+- SQLAlchemy
+- Flask-Login
+- ReportLab (PDF Generation)
+- Bootstrap (Frontend)
+
+## Setup Instructions
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd erp-website
+```
+
+2. Create and activate virtual environment:
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-2. Install dependencies:
+3. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. Run the application:
+4. Run the application:
 ```bash
 python app.py
 ```
 
-4. Open your browser and navigate to `http://localhost:5000`
+5. Access the application at `http://localhost:5000`
 
-## Usage
+## Default Admin Credentials
 
-1. **Adding Items**
-   - Click on "Add Item" in the navigation bar
-   - Fill in the item details (name, description, price, stock)
-   - Submit the form
+- Username: admin
+- Password: admin123
 
-2. **Creating Bills**
-   - Click on "Create Bill" in the navigation bar
-   - Enter customer name
-   - Select items and quantities
-   - The total will be calculated automatically
-   - Submit to generate the bill
+## Environment Variables
 
-3. **Viewing Inventory**
-   - The home page shows all items in the inventory
-   - Stock levels are updated automatically when bills are created
+Create a `.env` file in the root directory with the following variables:
 
-## Database
+```
+SECRET_KEY=your-secret-key
+DATABASE_URL=sqlite:///erp.db
+```
 
-The application uses SQLite as its database. The database file (`inventory.db`) will be created automatically when you first run the application.
+## License
 
-## PDF Bills
-
-Bills are automatically generated as PDF files when created. They include:
-- Bill number
-- Customer name
-- Date and time
-- Itemized list of purchased items
-- Total amount 
+MIT License 

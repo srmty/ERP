@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify, Response, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from datetime import datetime, timedelta
@@ -12,6 +12,11 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from io import BytesIO
 from reportlab.graphics.barcode import createBarcodeDrawing
 from reportlab.graphics.shapes import Drawing
+from dotenv import load_dotenv
+from flask_login import LoginManager, UserMixin, login_required, login_user, current_user
+
+# Load environment variables
+load_dotenv()
 
 app = Flask(__name__)
 
@@ -24,8 +29,19 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
+# Flask-Login setup
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Please log in to access this page.'
+login_manager.login_message_category = 'warning'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
 # User Model
-class User(db.Model):
+class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(120), nullable=False)
@@ -130,6 +146,7 @@ class InventoryHistory(db.Model):
 
 # Routes
 @app.route('/')
+@login_required
 def index():
     items = Item.query.all()
     
@@ -177,6 +194,7 @@ def index():
                          total_bills=total_bills)
 
 @app.route('/add_item', methods=['GET', 'POST'])
+@login_required
 def add_item():
     if request.method == 'POST':
         name = request.form['name']
@@ -193,6 +211,7 @@ def add_item():
     return render_template('add_item.html')
 
 @app.route('/create_bill', methods=['GET', 'POST'])
+@login_required
 def create_bill():
     if request.method == 'POST':
         customer_id = request.form.get('customer_id')
@@ -261,17 +280,8 @@ def create_bill():
         bill.total_amount = total_amount
         db.session.commit()
 
-        # Update inventory immediately after bill creation
-        if not bill.inventory_updated:
-            for item in bill.items:
-                db_item = Item.query.get(item.item_id)
-                if db_item and db_item.stock >= item.quantity:
-                    db_item.stock -= item.quantity
-            bill.inventory_updated = True
-            db.session.commit()
+        # (REMOVED inventory update logic from here)
 
-        # Generate PDF
-        generate_bill_pdf(bill, subtotal, total_tax)
         flash(f'Bill created successfully! <a href="/download_bill/{bill.id}" class="alert-link">Download Bill</a>')
         return redirect(url_for('index'))
     
@@ -287,27 +297,36 @@ def create_bill():
     return render_template('create_bill.html', items=items, customers=customers, invoice_number=invoice_number, today=now.strftime('%Y-%m-%d'))
 
 @app.route('/bills')
+@login_required
 def view_bills():
     bills = Bill.query.order_by(Bill.created_at.desc()).all()
     return render_template('bills.html', bills=bills)
 
 @app.route('/settings', methods=['GET', 'POST'])
+@login_required
 def settings():
-    settings = Settings.query.first()
-    if not settings:
-        settings = Settings()
-        db.session.add(settings)
-        db.session.commit()
+    if current_user.role != 'admin':
+        flash('Access denied. Admin privileges required.', 'danger')
+        return redirect(url_for('index'))
+        
     if request.method == 'POST':
+        settings = Settings.query.first()
+        if not settings:
+            settings = Settings()
+            db.session.add(settings)
+        
         settings.company_name = request.form['company_name']
         settings.address = request.form['address']
         settings.phone = request.form['phone']
         settings.email = request.form['email']
         settings.gstin = request.form['gstin']
         settings.website = request.form['website']
+        
         db.session.commit()
-        flash('Settings updated successfully!')
+        flash('Settings updated successfully!', 'success')
         return redirect(url_for('settings'))
+    
+    settings = Settings.query.first()
     return render_template('settings.html', settings=settings)
 
 def generate_bill_pdf(bill, subtotal, total_tax):
@@ -637,6 +656,14 @@ def generate_bill_pdf(bill, subtotal, total_tax):
 @app.route('/download_bill/<int:bill_id>')
 def download_bill(bill_id):
     bill = Bill.query.get_or_404(bill_id)
+    # Update inventory when downloading the bill
+    if not bill.inventory_updated:
+        for item in bill.items:
+            db_item = Item.query.get(item.item_id)
+            if db_item and db_item.stock >= item.quantity:
+                db_item.stock -= item.quantity
+        bill.inventory_updated = True
+        db.session.commit()
     # Calculate totals
     subtotal = sum(item.price * item.quantity for item in bill.items)
     total_tax = sum(item.price * item.quantity * (item.tax_rate or 0) / 100 for item in bill.items)
@@ -651,6 +678,7 @@ def download_bill(bill_id):
     )
 
 @app.route('/customers')
+@login_required
 def customers():
     customers = Customer.query.order_by(Customer.name).all()
     return render_template('customers.html', customers=customers)
@@ -698,6 +726,10 @@ def delete_customer(id):
 
 @app.route('/edit_item/<int:id>', methods=['GET', 'POST'])
 def edit_item(id):
+    if 'user_id' not in session:
+        flash('Please login to edit items!', 'warning')
+        return redirect(url_for('login'))
+        
     item = Item.query.get_or_404(id)
     if request.method == 'POST':
         # Store old values
@@ -736,7 +768,6 @@ def edit_item(id):
             old_values=old_values,
             new_values=new_values
         )
-        
         db.session.add(history)
         db.session.commit()
         flash('Item updated successfully!', 'success')
@@ -744,11 +775,13 @@ def edit_item(id):
     return render_template('edit_item.html', item=item)
 
 @app.route('/inventory_history')
+@login_required
 def inventory_history():
     history = InventoryHistory.query.order_by(InventoryHistory.created_at.desc()).all()
     return render_template('inventory_history.html', history=history)
 
 @app.route('/quotations', methods=['GET', 'POST'])
+@login_required
 def quotations():
     if request.method == 'POST':
         # Check if new customer is being added
@@ -945,6 +978,8 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
             company_details_content.append(Paragraph(f"GSTIN: {settings.gstin}", styles['CompanySubHeader']))
 
     company_details_data = [[detail] for detail in company_details_content]
+    if not company_details_data:
+        company_details_data = [[""]]
     company_details = Table(company_details_data, colWidths=[300])
     company_details.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, -1), 'LEFT'),
@@ -1244,8 +1279,68 @@ def view_bill(bill_id):
     settings = Settings.query.first()
     return render_template('view_bill.html', bill=bill, subtotal=subtotal, total_tax=total_tax, settings=settings)
 
-# Initialize admin user when app starts
-if __name__ == '__main__':
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+        
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        user = User.query.filter_by(username=username).first()
+        
+        if user and user.check_password(password):
+            login_user(user)
+            user.last_login = datetime.utcnow()
+            db.session.commit()
+            session['user_id'] = user.id
+            session['username'] = user.username
+            session['user_role'] = user.role
+            flash('Logged in successfully!', 'success')
+            next_page = request.args.get('next')
+            if not next_page or not next_page.startswith('/'):
+                next_page = url_for('index')
+            return redirect(next_page)
+        else:
+            flash('Invalid username or password!', 'danger')
+    
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    flash('Logged out successfully!', 'success')
+    return redirect(url_for('login'))
+
+@app.route('/reset_db')
+@login_required
+def reset_db():
+    if current_user.role != 'admin':
+        flash('Access denied. Admin privileges required.', 'danger')
+        return redirect(url_for('index'))
+    # Clear all data from all tables except User
+    for table in reversed(db.metadata.sorted_tables):
+        if table.name != 'user':
+            db.session.execute(table.delete())
+    db.session.commit()
+    flash('Database cleared successfully!', 'success')
+    return redirect(url_for('index'))
+
+def recreate_database():
     with app.app_context():
+        # Drop all tables
+        db.drop_all()
+        # Create all tables
         db.create_all()
-    app.run(debug=True, host='0.0.0.0', port=5002) 
+        # Create admin user if none exists
+        admin = User.query.filter_by(username='admin').first()
+        if not admin:
+            admin = User(username='admin', role='admin')
+            admin.set_password('admin123')  # Change this password in production!
+            db.session.add(admin)
+            db.session.commit()
+            print("Admin user created!")
+
+if __name__ == '__main__':
+    recreate_database()
+    app.run(debug=True, host='0.0.0.0', port=5000) 
