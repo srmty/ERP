@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card shadow-sm mb-4">
+  <div class="card-header bg-primary text-white">
+    <h2 class="mb-0">Company Settings</h2>
+  </div>
+  <div class="card-body">
+    <form method="POST" class="needs-validation" novalidate>
+      <div class="mb-3">
+        <label for="company_name" class="form-label">Company Name</label>
+        <input type="text" class="form-control" id="company_name" name="company_name" value="{{ settings.company_name or '' }}" required>
+      </div>
+      <div class="mb-3">
+        <label for="address" class="form-label">Address</label>
+        <textarea class="form-control" id="address" name="address" rows="2" required>{{ settings.address or '' }}</textarea>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label for="phone" class="form-label">Phone</label>
+          <input type="text" class="form-control" id="phone" name="phone" value="{{ settings.phone or '' }}">
+        </div>
+        <div class="col-md-4">
+          <label for="email" class="form-label">Email</label>
+          <input type="email" class="form-control" id="email" name="email" value="{{ settings.email or '' }}">
+        </div>
+        <div class="col-md-4">
+          <label for="gstin" class="form-label">GSTIN</label>
+          <input type="text" class="form-control" id="gstin" name="gstin" value="{{ settings.gstin or '' }}">
+        </div>
+      </div>
+      <div class="mt-4">
+        <button type="submit" class="btn btn-success px-4">Save Settings</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+// Form validation
+(function () {
+    'use strict'
+    var forms = document.querySelectorAll('.needs-validation')
+    Array.prototype.slice.call(forms).forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            if (!form.checkValidity()) {
+                event.preventDefault()
+                event.stopPropagation()
+            }
+            form.classList.add('was-validated')
+        }, false)
+    })
+})()
+</script>
+{% endblock %} 
