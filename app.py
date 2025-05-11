@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, session, jsonify, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
-from datetime import datetime
+from datetime import datetime, timedelta
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 import os
@@ -15,9 +15,19 @@ from reportlab.graphics.barcode import createBarcodeDrawing
 from reportlab.graphics.shapes import Drawing
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///erp.db'
+
+# Production-ready configuration
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key')  # Use environment variable in production
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///erp.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Session configuration
+app.config['SESSION_COOKIE_SECURE'] = True  # Only send cookie over HTTPS
+app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access to session cookie
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Protect against CSRF
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=1)  # Session expires after 1 day
+
+# Initialize extensions
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
@@ -63,20 +73,36 @@ def admin_required(f):
 # Login route
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        user = User.query.filter_by(username=username).first()
+    # If user is already logged in, redirect to index
+    if 'user_id' in session:
+        return redirect(url_for('index'))
         
-        if user and user.check_password(password):
-            session['user_id'] = user.id
-            session['username'] = user.username
-            session['user_role'] = user.role
-            user.last_login = datetime.utcnow()
-            db.session.commit()
-            flash('Logged in successfully!', 'success')
-            return redirect(url_for('index'))
-        flash('Invalid username or password', 'danger')
+    if request.method == 'POST':
+        try:
+            username = request.form.get('username', '').strip()
+            password = request.form.get('password', '').strip()
+            
+            if not username or not password:
+                flash('Please enter both username and password', 'danger')
+                return render_template('login.html')
+            
+            user = User.query.filter_by(username=username).first()
+            
+            if user and user.check_password(password):
+                session.permanent = True  # Make session persistent
+                session['user_id'] = user.id
+                session['username'] = user.username
+                session['user_role'] = user.role
+                user.last_login = datetime.utcnow()
+                db.session.commit()
+                flash('Logged in successfully!', 'success')
+                return redirect(url_for('index'))
+            else:
+                flash('Invalid username or password', 'danger')
+        except Exception as e:
+            app.logger.error(f"Login error: {str(e)}")
+            flash('An error occurred during login. Please try again.', 'danger')
+            
     return render_template('login.html')
 
 # Logout route
@@ -88,12 +114,19 @@ def logout():
 
 # Create admin user if not exists
 def create_admin_user():
-    admin = User.query.filter_by(username='rabi').first()
-    if not admin:
-        admin = User(username='rabi', role='admin')
-        admin.set_password('rabi123')  # Change this in production!
-        db.session.add(admin)
-        db.session.commit()
+    try:
+        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
+        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
+        
+        admin = User.query.filter_by(username=admin_username).first()
+        if not admin:
+            admin = User(username=admin_username, role='admin')
+            admin.set_password(admin_password)
+            db.session.add(admin)
+            db.session.commit()
+            app.logger.info(f"Admin user '{admin_username}' created successfully")
+    except Exception as e:
+        app.logger.error(f"Error creating admin user: {str(e)}")
 
 # Database Models
 class Item(db.Model):
