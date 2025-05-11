@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_file, session, jsonify, Response
+from flask import Flask, render_template, request, redirect, url_for, flash, send_file, jsonify, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from datetime import datetime, timedelta
@@ -9,7 +9,6 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from werkzeug.security import generate_password_hash, check_password_hash
-from functools import wraps
 from io import BytesIO
 from reportlab.graphics.barcode import createBarcodeDrawing
 from reportlab.graphics.shapes import Drawing
@@ -20,12 +19,6 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key')  # Use environment variable in production
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///erp.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-
-# Session configuration
-app.config['SESSION_COOKIE_SECURE'] = True  # Only send cookie over HTTPS
-app.config['SESSION_COOKIE_HTTPONLY'] = True  # Prevent JavaScript access to session cookie
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # Protect against CSRF
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=1)  # Session expires after 1 day
 
 # Initialize extensions
 db = SQLAlchemy(app)
@@ -45,88 +38,6 @@ class User(db.Model):
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
-
-# Login required decorator
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            flash('Please log in to access this page.', 'warning')
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-# Admin required decorator
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            flash('Please log in to access this page.', 'warning')
-            return redirect(url_for('login'))
-        user = User.query.get(session['user_id'])
-        if not user or user.role != 'admin':
-            flash('You do not have permission to access this page.', 'danger')
-            return redirect(url_for('index'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-# Login route
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    # If user is already logged in, redirect to index
-    if 'user_id' in session:
-        return redirect(url_for('index'))
-        
-    if request.method == 'POST':
-        try:
-            username = request.form.get('username', '').strip()
-            password = request.form.get('password', '').strip()
-            
-            if not username or not password:
-                flash('Please enter both username and password', 'danger')
-                return render_template('login.html')
-            
-            user = User.query.filter_by(username=username).first()
-            
-            if user and user.check_password(password):
-                session.permanent = True  # Make session persistent
-                session['user_id'] = user.id
-                session['username'] = user.username
-                session['user_role'] = user.role
-                user.last_login = datetime.utcnow()
-                db.session.commit()
-                flash('Logged in successfully!', 'success')
-                return redirect(url_for('index'))
-            else:
-                flash('Invalid username or password', 'danger')
-        except Exception as e:
-            app.logger.error(f"Login error: {str(e)}")
-            flash('An error occurred during login. Please try again.', 'danger')
-            
-    return render_template('login.html')
-
-# Logout route
-@app.route('/logout')
-def logout():
-    session.pop('user_id', None)
-    flash('Logged out successfully!', 'success')
-    return redirect(url_for('login'))
-
-# Create admin user if not exists
-def create_admin_user():
-    try:
-        admin_username = os.environ.get('ADMIN_USERNAME', 'admin')
-        admin_password = os.environ.get('ADMIN_PASSWORD', 'admin123')
-        
-        admin = User.query.filter_by(username=admin_username).first()
-        if not admin:
-            admin = User(username=admin_username, role='admin')
-            admin.set_password(admin_password)
-            db.session.add(admin)
-            db.session.commit()
-            app.logger.info(f"Admin user '{admin_username}' created successfully")
-    except Exception as e:
-        app.logger.error(f"Error creating admin user: {str(e)}")
 
 # Database Models
 class Item(db.Model):
@@ -219,7 +130,6 @@ class InventoryHistory(db.Model):
 
 # Routes
 @app.route('/')
-@login_required
 def index():
     items = Item.query.all()
     
@@ -267,7 +177,6 @@ def index():
                          total_bills=total_bills)
 
 @app.route('/add_item', methods=['GET', 'POST'])
-@login_required
 def add_item():
     if request.method == 'POST':
         name = request.form['name']
@@ -284,7 +193,6 @@ def add_item():
     return render_template('add_item.html')
 
 @app.route('/create_bill', methods=['GET', 'POST'])
-@login_required
 def create_bill():
     if request.method == 'POST':
         customer_id = request.form.get('customer_id')
@@ -379,13 +287,11 @@ def create_bill():
     return render_template('create_bill.html', items=items, customers=customers, invoice_number=invoice_number, today=now.strftime('%Y-%m-%d'))
 
 @app.route('/bills')
-@login_required
 def view_bills():
     bills = Bill.query.order_by(Bill.created_at.desc()).all()
     return render_template('bills.html', bills=bills)
 
 @app.route('/settings', methods=['GET', 'POST'])
-@admin_required
 def settings():
     settings = Settings.query.first()
     if not settings:
@@ -745,13 +651,11 @@ def download_bill(bill_id):
     )
 
 @app.route('/customers')
-@login_required
 def customers():
     customers = Customer.query.order_by(Customer.name).all()
     return render_template('customers.html', customers=customers)
 
 @app.route('/add_customer', methods=['GET', 'POST'])
-@login_required
 def add_customer():
     if request.method == 'POST':
         customer = Customer(
@@ -768,7 +672,6 @@ def add_customer():
     return render_template('add_customer.html')
 
 @app.route('/edit_customer/<int:id>', methods=['GET', 'POST'])
-@login_required
 def edit_customer(id):
     customer = Customer.query.get_or_404(id)
     if request.method == 'POST':
@@ -783,7 +686,6 @@ def edit_customer(id):
     return render_template('edit_customer.html', customer=customer)
 
 @app.route('/delete_customer/<int:id>')
-@login_required
 def delete_customer(id):
     customer = Customer.query.get_or_404(id)
     if customer.bills:
@@ -795,7 +697,6 @@ def delete_customer(id):
     return redirect(url_for('customers'))
 
 @app.route('/edit_item/<int:id>', methods=['GET', 'POST'])
-@login_required
 def edit_item(id):
     item = Item.query.get_or_404(id)
     if request.method == 'POST':
@@ -843,13 +744,11 @@ def edit_item(id):
     return render_template('edit_item.html', item=item)
 
 @app.route('/inventory_history')
-@login_required
 def inventory_history():
     history = InventoryHistory.query.order_by(InventoryHistory.created_at.desc()).all()
     return render_template('inventory_history.html', history=history)
 
 @app.route('/quotations', methods=['GET', 'POST'])
-@login_required
 def quotations():
     if request.method == 'POST':
         # Check if new customer is being added
@@ -1247,7 +1146,6 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
     return buffer
 
 @app.route('/api/product_sales/<int:product_id>')
-@login_required
 def product_sales(product_id):
     # Get all bill items for this product
     sales = db.session.query(
@@ -1278,7 +1176,6 @@ def product_sales(product_id):
     return jsonify(sales_data)
 
 @app.route('/export/bills')
-@login_required
 def export_bills():
     import csv
     from io import StringIO
@@ -1298,7 +1195,6 @@ def export_bills():
     return Response(output, mimetype='text/csv', headers={"Content-Disposition": "attachment;filename=bills.csv"})
 
 @app.route('/export/customers')
-@login_required
 def export_customers():
     import csv
     from io import StringIO
@@ -1319,7 +1215,6 @@ def export_customers():
     return Response(output, mimetype='text/csv', headers={"Content-Disposition": "attachment;filename=customers.csv"})
 
 @app.route('/export/inventory')
-@login_required
 def export_inventory():
     import csv
     from io import StringIO
@@ -1341,7 +1236,6 @@ def export_inventory():
     return Response(output, mimetype='text/csv', headers={"Content-Disposition": "attachment;filename=inventory.csv"})
 
 @app.route('/view_bill/<int:bill_id>')
-@login_required
 def view_bill(bill_id):
     bill = Bill.query.get_or_404(bill_id)
     # Calculate subtotal and total tax
@@ -1354,5 +1248,4 @@ def view_bill(bill_id):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-        create_admin_user()
     app.run(debug=True, host='0.0.0.0', port=5002) 
