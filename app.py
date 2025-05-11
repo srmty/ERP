@@ -430,6 +430,8 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     
     # Create company details as a separate table to ensure proper alignment
     company_details_data = [[detail] for detail in company_details_content]
+    if not company_details_data:  # If no company details, add an empty row
+        company_details_data = [[""]]
     company_details = Table(company_details_data, colWidths=[300])
     company_details.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, -1), 'LEFT'),
