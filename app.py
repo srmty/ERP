@@ -296,7 +296,7 @@ def create_bill():
         db.extract('month', Bill.created_at) == now.month
     ).count() + 1
     invoice_number = f"{month_str}-{count:03d}"
-    return render_template('create_bill.html', items=items, customers=customers, invoice_number=invoice_number, today=now.strftime('%Y-%m-%d'))
+    return render_template('create_bill.html', items=items, customers=customers, invoice_number=invoice_number, today=now.strftime('%d/%m/%Y'))
 
 @app.route('/bills')
 @login_required
@@ -460,7 +460,7 @@ def generate_bill_pdf(bill, subtotal, total_tax):
         elements.append(Paragraph(f"<b>{customer_name}</b>", styles['NormalText']))
     
     # Right side: Invoice information in a box with orange border
-    invoice_date = bill.created_at.strftime('%B %d, %Y')
+    invoice_date = bill.created_at.strftime('%d/%m/%Y')
     invoice_number = bill.invoice_number
     
     # Create two rows side by side
@@ -1009,9 +1009,9 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
     if customer_name:
         elements.append(Paragraph(f"<b>{customer_name}</b>", styles['NormalText']))
 
-    quotation_date = quotation.created_at.strftime('%B %d, %Y')
+    quotation_date = quotation.created_at.strftime('%d/%m/%Y')
     quotation_number = quotation.quotation_number
-    valid_until = quotation.valid_until.strftime('%B %d, %Y')
+    valid_until = quotation.valid_until.strftime('%d/%m/%Y')
 
     customer_info = []
     if quotation.mobile_number:

@@ -25,8 +25,8 @@
                 <td>{{ bill.customer_name }}</td>
                 <td>{{ bill.mobile_number or '' }}</td>
                 <td>{{ bill.payment_mode or '' }}</td>
-                <td>${{ "%.2f"|format(bill.total_amount) }}</td>
-                <td>{{ bill.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                <td>₹{{ "%.2f"|format(bill.total_amount) }}</td>
+                <td>{{ bill.created_at.strftime('%d/%m/%Y') }}</td>
                 <td>
                     <a href="{{ url_for('download_bill', bill_id=bill.id) }}" class="btn btn-primary btn-sm">
                         <i class="fas fa-download"></i> Download Bill
