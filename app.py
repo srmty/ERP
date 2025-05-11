@@ -146,8 +146,10 @@ class InventoryHistory(db.Model):
 
 # Routes
 @app.route('/')
-@login_required
 def index():
+    if not current_user.is_authenticated:
+        return redirect(url_for('login'))
+        
     items = Item.query.all()
     
     # Calculate statistics
