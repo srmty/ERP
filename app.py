@@ -13,7 +13,6 @@ from io import BytesIO
 from reportlab.graphics.barcode import createBarcodeDrawing
 from reportlab.graphics.shapes import Drawing
 from dotenv import load_dotenv
-from flask_login import LoginManager, UserMixin, login_required, login_user, current_user
 
 # Load environment variables
 load_dotenv()
@@ -21,39 +20,13 @@ load_dotenv()
 app = Flask(__name__)
 
 # Production-ready configuration
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key')  # Use environment variable in production
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///erp.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize extensions
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
-
-# Flask-Login setup
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
-login_manager.login_message = 'Please log in to access this page.'
-login_manager.login_message_category = 'warning'
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
-
-# User Model
-class User(db.Model, UserMixin):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(20), nullable=False, default='cashier')  # admin, cashier, manager
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    last_login = db.Column(db.DateTime)
-
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
 
 # Database Models
 class Item(db.Model):
@@ -62,8 +35,8 @@ class Item(db.Model):
     description = db.Column(db.String(200))
     price = db.Column(db.Float, nullable=False)
     stock = db.Column(db.Integer, nullable=False)
-    hsn_sac_number = db.Column(db.String(20), nullable=True)  # HSN/SAC number
-    tax_rate = db.Column(db.Float, nullable=True, default=0.0)  # percent
+    hsn_sac_number = db.Column(db.String(20), nullable=True)
+    tax_rate = db.Column(db.Float, nullable=True, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Customer(db.Model):
@@ -140,66 +113,19 @@ class InventoryHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    action = db.Column(db.String(50), nullable=False)  # 'edit', 'add', etc.
-    old_values = db.Column(db.JSON)  # Store old values
-    new_values = db.Column(db.JSON)  # Store new values
+    action = db.Column(db.String(50), nullable=False)
+    old_values = db.Column(db.JSON)
+    new_values = db.Column(db.JSON)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     item = db.relationship('Item', backref='history')
     user = db.relationship('User', backref='inventory_history')
 
-# Routes
 @app.route('/')
 def index():
-    if not current_user.is_authenticated:
-        return redirect(url_for('login'))
-        
-    items = Item.query.all()
-    
-    # Calculate statistics
-    total_sales = db.session.query(db.func.sum(Bill.total_amount)).scalar() or 0
-    total_customers = Customer.query.count()
-    total_items = len(items)
-    total_inventory_value = sum(item.price * item.stock for item in items)
-    recent_bills = Bill.query.order_by(Bill.created_at.desc()).limit(5).all()
-    
-    # Additional statistics
-    today = datetime.now().date()
-    today_sales = db.session.query(db.func.sum(Bill.total_amount)).filter(
-        db.func.date(Bill.created_at) == today
-    ).scalar() or 0
-    
-    # Monthly sales
-    current_month = datetime.now().month
-    current_year = datetime.now().year
-    monthly_sales = db.session.query(db.func.sum(Bill.total_amount)).filter(
-        db.extract('month', Bill.created_at) == current_month,
-        db.extract('year', Bill.created_at) == current_year
-    ).scalar() or 0
-    
-    # Low stock items (less than 10 items)
-    low_stock_items = Item.query.filter(Item.stock < 10).count()
-    
-    # Average bill amount
-    avg_bill_amount = db.session.query(db.func.avg(Bill.total_amount)).scalar() or 0
-    
-    # Total bills count
-    total_bills = Bill.query.count()
-    
-    return render_template('index.html', 
-                         items=items,
-                         total_sales=total_sales,
-                         total_customers=total_customers,
-                         total_items=total_items,
-                         total_inventory_value=total_inventory_value,
-                         recent_bills=recent_bills,
-                         today_sales=today_sales,
-                         monthly_sales=monthly_sales,
-                         low_stock_items=low_stock_items,
-                         avg_bill_amount=avg_bill_amount,
-                         total_bills=total_bills)
+    items = Item.query.order_by(Item.name).all()
+    return render_template('index.html', items=items)
 
 @app.route('/add_item', methods=['GET', 'POST'])
-@login_required
 def add_item():
     if request.method == 'POST':
         name = request.form['name']
@@ -216,7 +142,6 @@ def add_item():
     return render_template('add_item.html')
 
 @app.route('/create_bill', methods=['GET', 'POST'])
-@login_required
 def create_bill():
     if request.method == 'POST':
         customer_id = request.form.get('customer_id')
@@ -228,7 +153,6 @@ def create_bill():
             address = customer.address
             gstin = customer.gstin
         else:
-            # Handle walk-in customer
             customer_name = request.form.get('customer_name', '').strip()
             if not customer_name:
                 customer_name = 'Walk-in Customer'
@@ -240,7 +164,6 @@ def create_bill():
         items = request.form.getlist('items[]')
         quantities = request.form.getlist('quantities[]')
         
-        # Check stock levels before processing
         for item_id, quantity in zip(items, quantities):
             if int(quantity) > 0:
                 item = Item.query.get(item_id)
@@ -248,7 +171,6 @@ def create_bill():
                     flash(f'Insufficient stock for {item.name}. Available: {item.stock}, Requested: {quantity}', 'danger')
                     return redirect(url_for('create_bill'))
         
-        # Generate invoice number
         now = datetime.now()
         month_str = now.strftime('%Y-%m')
         count = Bill.query.filter(
@@ -291,7 +213,6 @@ def create_bill():
                         tax_rate=item_tax
                     )
                     db.session.add(bill_item)
-                    # Update stock
                     item.stock -= int(quantity)
         
         total_amount = subtotal + total_tax
@@ -313,18 +234,12 @@ def create_bill():
     return render_template('create_bill.html', items=items, customers=customers, invoice_number=invoice_number, today=now.strftime('%d/%m/%Y'))
 
 @app.route('/bills')
-@login_required
 def view_bills():
     bills = Bill.query.order_by(Bill.created_at.desc()).all()
     return render_template('bills.html', bills=bills)
 
 @app.route('/settings', methods=['GET', 'POST'])
-@login_required
 def settings():
-    if current_user.role != 'admin':
-        flash('Access denied. Admin privileges required.', 'danger')
-        return redirect(url_for('index'))
-        
     if request.method == 'POST':
         settings = Settings.query.first()
         if not settings:
@@ -356,14 +271,12 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     elements = []
     styles = getSampleStyleSheet()
     
-    # Color scheme to match example
-    primary_color = colors.HexColor('#1A8CFF')    # Bright blue (matches example)
-    secondary_color = colors.HexColor('#424242')  # Dark gray
-    accent_color = colors.HexColor('#FF9900')     # Orange for totals (matches example)
-    light_bg = colors.HexColor('#F5F5F5')         # Light gray background
-    text_color = colors.HexColor('#212121')       # Near black for text
+    primary_color = colors.HexColor('#1A8CFF')
+    secondary_color = colors.HexColor('#424242')
+    accent_color = colors.HexColor('#FF9900')
+    light_bg = colors.HexColor('#F5F5F5')
+    text_color = colors.HexColor('#212121')
     
-    # Create improved styles with better typography and color scheme
     styles.add(ParagraphStyle(
         name='CompanyHeader', fontSize=20, leading=24, alignment=1, 
         fontName='Helvetica', spaceAfter=4, textColor=primary_color))
@@ -393,10 +306,8 @@ def generate_bill_pdf(bill, subtotal, total_tax):
         fontName='Helvetica', textColor=accent_color, 
         borderColor=accent_color, borderWidth=1, borderPadding=3))
     
-    # Get company settings
     settings = Settings.query.first()
     
-    # Add a decorative banner at the top
     top_banner = Table([['INVOICE']], colWidths=[540])
     top_banner.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (0, 0), primary_color),
@@ -410,7 +321,6 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     ]))
     elements.append(top_banner)
 
-    # Logo at the top left, immediately left of the company name, almost zero padding
     logo_path = os.path.join('static', 'logo.png')
     logo_data = None
     if os.path.exists(logo_path):
@@ -418,10 +328,8 @@ def generate_bill_pdf(bill, subtotal, total_tax):
         logo_data = img
     else:
         logo_data = Paragraph("", styles['NormalText'])
-    # Header row: logo and company name close together, minimal padding
     company_name = settings.company_name if settings and settings.company_name else ""
     company_name_para = Paragraph(company_name, ParagraphStyle(name='CenteredCompanyName', fontSize=14, leading=18, alignment=0, fontName='Helvetica-Bold', textColor=primary_color))
-    # Center the logo and company name as a group
     logo_name_row = Table([[logo_data, company_name_para]], colWidths=[42, 200], hAlign='CENTER')
     logo_name_row.setStyle(TableStyle([
         ('ALIGN', (0, 0), (1, 0), 'CENTER'),
@@ -433,7 +341,6 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     ]))
     elements.append(logo_name_row)
 
-    # Prepare customer details box (BILLED TO)
     customer_box_data = []
     customer_box_data.append([Paragraph("<b>BILLED TO:</b>", ParagraphStyle(name='BillToMedium', fontSize=12, leading=14, alignment=0, fontName='Helvetica-Bold', textColor=primary_color))])
     customer_name = bill.customer.name if bill.customer else bill.customer_name
@@ -458,7 +365,6 @@ def generate_bill_pdf(bill, subtotal, total_tax):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
     ]))
 
-    # Company details box (already compact)
     company_details_content = []
     company_details_content.append(Paragraph("<b>SELLER'S DETAILS</b>", ParagraphStyle(name='SellerDetailsHeader', fontSize=11, leading=13, alignment=0, fontName='Helvetica-Bold', textColor=primary_color)))
     if settings:
@@ -490,7 +396,6 @@ def generate_bill_pdf(bill, subtotal, total_tax):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
     ]))
 
-    # Invoice info box (orange border)
     invoice_date = bill.created_at.strftime('%d/%m/%Y')
     invoice_number = bill.invoice_number
     invoice_data = [
@@ -509,7 +414,6 @@ def generate_bill_pdf(bill, subtotal, total_tax):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
     ]))
 
-    # Company details and invoice info stacked, as before
     stacked_boxes = Table([[company_details], [invoice_box]], colWidths=[300])
     stacked_boxes.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
@@ -520,7 +424,6 @@ def generate_bill_pdf(bill, subtotal, total_tax):
         ('BOTTOMPADDING', (0, 1), (0, 1), 0),
     ]))
 
-    # Place customer box left, stacked boxes right, both close to logo
     info_row = Table([[customer_box, stacked_boxes]], colWidths=[190, 320])
     info_row.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, 0), 'LEFT'),
@@ -534,7 +437,6 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     elements.append(info_row)
     elements.append(Spacer(1, 10))
 
-    # Enhanced Items Table with styling that matches the example
     data = [
         [Paragraph('Item Description', styles['TableHeader']),
          Paragraph('HSN/SAC', styles['TableHeader']),
@@ -545,30 +447,26 @@ def generate_bill_pdf(bill, subtotal, total_tax):
          Paragraph('Total', styles['TableHeader'])]
     ]
     
-    # Alternate row colors for better readability
     row_colors = [light_bg, colors.white]
     row_style_list = [
         ('BACKGROUND', (0, 0), (-1, 0), primary_color),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.lightgrey),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),  # Left align item description
-        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),  # Center align all other columns
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
         ('TOPPADDING', (0, 0), (-1, 0), 6),
     ]
     
-    # Add row data with alternating colors
     for i, item in enumerate(bill.items):
         item_tax = item.tax_rate or 0
         tax_amount = item.price * item.quantity * item_tax / 100
         total = item.price * item.quantity + tax_amount
         
-        # Add alternating row colors
         if i % 2 == 0:
             row_style_list.append(('BACKGROUND', (0, i+1), (-1, i+1), light_bg))
         
-        # Removed the ■ symbol from the price display
         data.append([
             Paragraph(item.item.name, styles['TableCell']),
             Paragraph(item.item.hsn_sac_number or '', styles['TableCell']),
@@ -579,17 +477,14 @@ def generate_bill_pdf(bill, subtotal, total_tax):
             Paragraph(f"{total:.2f}", styles['TableCell'])
         ])
     
-    # Calculate total rows index
     total_row_index = len(data)
     
-    # Add subtotal, tax and total rows matching the example - removed the ■ symbol
     data.extend([
         ['', '', '', '', '', Paragraph('Subtotal:', styles['TableCell']), Paragraph(f"{subtotal:.2f}", styles['TotalAmount'])],
         ['', '', '', '', '', Paragraph('Total Tax:', styles['TableCell']), Paragraph(f"{total_tax:.2f}", styles['TotalAmount'])],
         ['', '', '', '', '', Paragraph('TOTAL:', styles['TableHeader']), Paragraph(f"{bill.total_amount:.2f}", styles['TotalAmount'])]
     ])
     
-    # Add styling for total rows
     row_style_list.extend([
         ('BACKGROUND', (5, total_row_index), (6, total_row_index), colors.white),
         ('BACKGROUND', (5, total_row_index+1), (6, total_row_index+1), colors.white),
@@ -604,18 +499,14 @@ def generate_bill_pdf(bill, subtotal, total_tax):
         ('LINEABOVE', (5, total_row_index), (6, total_row_index), 0.5, colors.black),
     ])
     
-    # Create and style the table with more space - increased height
-    # Adjust column widths to use more of the available space
     table = Table(data, colWidths=[150, 70, 50, 70, 50, 70, 120])
     table.setStyle(TableStyle(row_style_list + [
-        # Add more height to each row
-        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),  # Reduced bottom padding
-        ('TOPPADDING', (0, 1), (-1, -1), 6),     # Reduced top padding
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+        ('TOPPADDING', (0, 1), (-1, -1), 6),
     ]))
     elements.append(table)
     elements.append(Spacer(1, 20))
     
-    # Terms and conditions in one compact line
     terms_text = "Terms & Conditions: 1. Goods once sold will not be taken back or exchanged. 2. Subject to local jurisdiction."
     
     terms = Paragraph(terms_text, 
@@ -633,7 +524,6 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     elements.append(terms)
     elements.append(Spacer(1, 1))
     
-    # Thank you message matching the example
     thank_you = Table([
         [Paragraph("THANK YOU FOR YOUR BUSINESS!", 
                    ParagraphStyle(name='ThankYou', fontSize=10, alignment=1, 
@@ -648,10 +538,8 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     ]))
     elements.append(thank_you)
     
-    # Very minimal footer
     elements.append(Spacer(1, 5))
     
-    # Simple footer text centered with smaller font
     footer_text = "This is a computer generated invoice, no signature required."
     
     footer = Paragraph(footer_text, 
@@ -663,7 +551,6 @@ def generate_bill_pdf(bill, subtotal, total_tax):
                                     textColor=secondary_color))
     elements.append(footer)
     
-    # Add Stamp & Signature box at the bottom right, flush with right margin
     elements.append(Spacer(1, 20))
     stamp_box = Table(
         [[Paragraph('<b>Stamp & Signature</b>', ParagraphStyle(name='StampLabel', fontSize=9, alignment=1, fontName='Helvetica'))],
@@ -677,10 +564,8 @@ def generate_bill_pdf(bill, subtotal, total_tax):
         ('TOPPADDING', (0, 0), (0, 0), 2),
         ('BOTTOMPADDING', (0, 1), (0, 1), 10),
     ]))
-    # Right align the box flush with the right margin
     elements.append(Table([["", stamp_box]], colWidths=[390, 150], hAlign='RIGHT'))
     
-    # Build the PDF
     doc.build(elements)
     buffer.seek(0)
     return buffer
@@ -688,7 +573,6 @@ def generate_bill_pdf(bill, subtotal, total_tax):
 @app.route('/download_bill/<int:bill_id>')
 def download_bill(bill_id):
     bill = Bill.query.get_or_404(bill_id)
-    # Update inventory when downloading the bill
     if not bill.inventory_updated:
         for item in bill.items:
             db_item = Item.query.get(item.item_id)
@@ -696,12 +580,9 @@ def download_bill(bill_id):
                 db_item.stock -= item.quantity
         bill.inventory_updated = True
         db.session.commit()
-    # Calculate totals
     subtotal = sum(item.price * item.quantity for item in bill.items)
     total_tax = sum(item.price * item.quantity * (item.tax_rate or 0) / 100 for item in bill.items)
-    # Generate PDF in memory
     pdf_buffer = generate_bill_pdf(bill, subtotal, total_tax)
-    # Send the PDF from memory
     return send_file(
         pdf_buffer,
         mimetype='application/pdf',
@@ -710,7 +591,6 @@ def download_bill(bill_id):
     )
 
 @app.route('/customers')
-@login_required
 def customers():
     customers = Customer.query.order_by(Customer.name).all()
     return render_template('customers.html', customers=customers)
@@ -758,13 +638,8 @@ def delete_customer(id):
 
 @app.route('/edit_item/<int:id>', methods=['GET', 'POST'])
 def edit_item(id):
-    if 'user_id' not in session:
-        flash('Please login to edit items!', 'warning')
-        return redirect(url_for('login'))
-        
     item = Item.query.get_or_404(id)
     if request.method == 'POST':
-        # Store old values
         old_values = {
             'name': item.name,
             'description': item.description,
@@ -774,7 +649,6 @@ def edit_item(id):
             'tax_rate': item.tax_rate
         }
         
-        # Update item
         item.name = request.form['name']
         item.description = request.form['description']
         item.price = float(request.form['price'])
@@ -782,7 +656,6 @@ def edit_item(id):
         item.hsn_sac_number = request.form['hsn_sac_number'] if request.form['hsn_sac_number'] else None
         item.tax_rate = float(request.form['tax_rate']) if request.form['tax_rate'] else 0.0
         
-        # Store new values
         new_values = {
             'name': item.name,
             'description': item.description,
@@ -792,7 +665,6 @@ def edit_item(id):
             'tax_rate': item.tax_rate
         }
         
-        # Create history entry
         history = InventoryHistory(
             item_id=item.id,
             user_id=session['user_id'],
@@ -807,16 +679,13 @@ def edit_item(id):
     return render_template('edit_item.html', item=item)
 
 @app.route('/inventory_history')
-@login_required
 def inventory_history():
     history = InventoryHistory.query.order_by(InventoryHistory.created_at.desc()).all()
     return render_template('inventory_history.html', history=history)
 
 @app.route('/quotations', methods=['GET', 'POST'])
-@login_required
 def quotations():
     if request.method == 'POST':
-        # Check if new customer is being added
         new_customer_name = request.form.get('new_customer_name')
         if new_customer_name:
             new_customer = Customer(
@@ -832,14 +701,11 @@ def quotations():
         else:
             customer_id = request.form.get('customer_id')
             
-        # Handle date format
         valid_until_str = request.form.get('valid_until')
         try:
-            # Try DD/MM/YYYY format first
             valid_until = datetime.strptime(valid_until_str, '%d/%m/%Y')
         except ValueError:
             try:
-                # Try YYYY-MM-DD format
                 valid_until = datetime.strptime(valid_until_str, '%Y-%m-%d')
             except ValueError:
                 flash('Invalid date format. Please use DD/MM/YYYY or YYYY-MM-DD', 'error')
@@ -848,7 +714,6 @@ def quotations():
         quantities = request.form.getlist('quantities[]')
         prices = request.form.getlist('prices[]')
         
-        # Get customer details
         customer = Customer.query.get(customer_id)
         if customer:
             customer_name = customer.name
@@ -860,7 +725,6 @@ def quotations():
             flash('Customer not found!', 'error')
             return redirect(url_for('quotations'))
         
-        # Generate quotation number
         now = datetime.now()
         month_str = now.strftime('%Y%m')
         count = Quotation.query.filter(
@@ -869,12 +733,10 @@ def quotations():
         ).count() + 1
         quotation_number = f"Q{month_str}-{count:03d}"
         
-        # Calculate totals
         subtotal = 0
         total_tax = 0
         total_amount = 0
         
-        # Create quotation
         quotation = Quotation(
             customer_id=customer_id,
             customer_name=customer_name,
@@ -888,10 +750,9 @@ def quotations():
         )
         db.session.add(quotation)
         
-        # Add items
         for item_id, quantity, price in zip(items, quantities, prices):
             if not price or not quantity:
-                continue  # Skip if price or quantity is empty
+                continue
             if int(quantity) > 0:
                 item = Item.query.get(item_id)
                 if item:
@@ -914,10 +775,8 @@ def quotations():
         quotation.total_amount = total_amount
         db.session.commit()
         
-        # Generate PDF
         pdf_buffer = generate_quotation_pdf(quotation, subtotal, total_tax)
         
-        # Send the PDF
         return send_file(
             pdf_buffer,
             mimetype='application/pdf',
@@ -937,14 +796,12 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
     elements = []
     styles = getSampleStyleSheet()
     
-    # Color scheme to match example
-    primary_color = colors.HexColor('#1A8CFF')    # Bright blue (matches example)
-    secondary_color = colors.HexColor('#424242')  # Dark gray
-    accent_color = colors.HexColor('#FF9900')     # Orange for totals (matches example)
-    light_bg = colors.HexColor('#F5F5F5')         # Light gray background
-    text_color = colors.HexColor('#212121')       # Near black for text
+    primary_color = colors.HexColor('#1A8CFF')
+    secondary_color = colors.HexColor('#424242')
+    accent_color = colors.HexColor('#FF9900')
+    light_bg = colors.HexColor('#F5F5F5')
+    text_color = colors.HexColor('#212121')
     
-    # Create improved styles with better typography and color scheme
     styles.add(ParagraphStyle(
         name='CompanyHeader', fontSize=20, leading=24, alignment=1, 
         fontName='Helvetica', spaceAfter=4, textColor=primary_color))
@@ -974,10 +831,8 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
         fontName='Helvetica', textColor=accent_color, 
         borderColor=accent_color, borderWidth=1, borderPadding=3))
     
-    # Get company settings
     settings = Settings.query.first()
     
-    # Add a decorative banner at the top
     top_banner = Table([['QUOTATION']], colWidths=[540])
     top_banner.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (0, 0), primary_color),
@@ -991,7 +846,6 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
     ]))
     elements.append(top_banner)
 
-    # Logo at the top left, immediately left of the company name, almost zero padding
     logo_path = os.path.join('static', 'logo.png')
     logo_data = None
     if os.path.exists(logo_path):
@@ -999,10 +853,8 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
         logo_data = img
     else:
         logo_data = Paragraph("", styles['NormalText'])
-    # Header row: logo and company name close together, minimal padding
     company_name = settings.company_name if settings and settings.company_name else ""
     company_name_para = Paragraph(company_name, ParagraphStyle(name='CenteredCompanyName', fontSize=14, leading=18, alignment=0, fontName='Helvetica-Bold', textColor=primary_color))
-    # Center the logo and company name as a group
     logo_name_row = Table([[logo_data, company_name_para]], colWidths=[42, 200], hAlign='CENTER')
     logo_name_row.setStyle(TableStyle([
         ('ALIGN', (0, 0), (1, 0), 'CENTER'),
@@ -1014,7 +866,6 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
     ]))
     elements.append(logo_name_row)
 
-    # Prepare customer details box (QUOTED TO)
     customer_box_data = []
     customer_box_data.append([Paragraph("<b>QUOTED TO:</b>", ParagraphStyle(name='BillToMedium', fontSize=12, leading=14, alignment=0, fontName='Helvetica-Bold', textColor=primary_color))])
     customer_name = quotation.customer.name if quotation.customer else quotation.customer_name
@@ -1039,7 +890,6 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
     ]))
 
-    # Company details box
     company_details_content = []
     company_details_content.append(Paragraph("<b>SELLER'S DETAILS</b>", ParagraphStyle(name='SellerDetailsHeader', fontSize=11, leading=13, alignment=0, fontName='Helvetica-Bold', textColor=primary_color)))
     if settings:
@@ -1071,7 +921,6 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
     ]))
 
-    # Quotation info box (orange border)
     quotation_date = quotation.created_at.strftime('%d/%m/%Y')
     quotation_number = quotation.quotation_number
     valid_until = quotation.valid_until.strftime('%d/%m/%Y')
@@ -1091,7 +940,6 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
         ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
     ]))
 
-    # Company details and quotation info stacked
     stacked_boxes = Table([[company_details], [quotation_box]], colWidths=[300])
     stacked_boxes.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, -1), 'RIGHT'),
@@ -1102,7 +950,6 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
         ('BOTTOMPADDING', (0, 1), (0, 1), 0),
     ]))
 
-    # Place customer box left, stacked boxes right
     info_row = Table([[customer_box, stacked_boxes]], colWidths=[190, 320])
     info_row.setStyle(TableStyle([
         ('ALIGN', (0, 0), (0, 0), 'LEFT'),
@@ -1116,7 +963,6 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
     elements.append(info_row)
     elements.append(Spacer(1, 10))
 
-    # Enhanced Items Table with styling that matches the example
     data = [
         [Paragraph('Item Description', styles['TableHeader']),
          Paragraph('HSN/SAC', styles['TableHeader']),
@@ -1127,26 +973,23 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
          Paragraph('Total', styles['TableHeader'])]
     ]
     
-    # Alternate row colors for better readability
     row_colors = [light_bg, colors.white]
     row_style_list = [
         ('BACKGROUND', (0, 0), (-1, 0), primary_color),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.lightgrey),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),  # Left align item description
-        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),  # Center align all other columns
+        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+        ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('BOTTOMPADDING', (0, 0), (-1, 0), 6),
         ('TOPPADDING', (0, 0), (-1, 0), 6),
     ]
     
-    # Add row data with alternating colors
     for i, item in enumerate(quotation.items):
         item_tax = item.tax_rate or 0
         tax_amount = item.price * item.quantity * item_tax / 100
         total = item.price * item.quantity + tax_amount
         
-        # Add alternating row colors
         if i % 2 == 0:
             row_style_list.append(('BACKGROUND', (0, i+1), (-1, i+1), light_bg))
         
@@ -1160,17 +1003,14 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
             Paragraph(f"{total:.2f}", styles['TableCell'])
         ])
     
-    # Calculate total rows index
     total_row_index = len(data)
     
-    # Add subtotal, tax and total rows matching the example
     data.extend([
         ['', '', '', '', '', Paragraph('Subtotal:', styles['TableCell']), Paragraph(f"{subtotal:.2f}", styles['TotalAmount'])],
         ['', '', '', '', '', Paragraph('Total Tax:', styles['TableCell']), Paragraph(f"{total_tax:.2f}", styles['TotalAmount'])],
         ['', '', '', '', '', Paragraph('TOTAL:', styles['TableHeader']), Paragraph(f"{quotation.total_amount:.2f}", styles['TotalAmount'])]
     ])
     
-    # Add styling for total rows
     row_style_list.extend([
         ('BACKGROUND', (5, total_row_index), (6, total_row_index), colors.white),
         ('BACKGROUND', (5, total_row_index+1), (6, total_row_index+1), colors.white),
@@ -1185,7 +1025,6 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
         ('LINEABOVE', (5, total_row_index), (6, total_row_index), 0.5, colors.black),
     ])
     
-    # Create and style the table with more space
     table = Table(data, colWidths=[150, 70, 50, 70, 50, 70, 120])
     table.setStyle(TableStyle(row_style_list + [
         ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
@@ -1194,7 +1033,6 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
     elements.append(table)
     elements.append(Spacer(1, 20))
     
-    # Terms and conditions in one compact line
     terms_text = "Terms & Conditions: 1. This quotation is valid until the specified date. 2. Prices are subject to change without notice. 3. All prices are exclusive of taxes unless specified. 4. Payment terms to be discussed. 5. Subject to local jurisdiction. 6. E. & O.E."
     
     terms = Paragraph(terms_text, 
@@ -1212,7 +1050,6 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
     elements.append(terms)
     elements.append(Spacer(1, 1))
     
-    # Thank you message
     thank_you = Table([
         [Paragraph("THANK YOU FOR YOUR BUSINESS!", 
                    ParagraphStyle(name='ThankYou', fontSize=10, alignment=1, 
@@ -1227,10 +1064,8 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
     ]))
     elements.append(thank_you)
     
-    # Very minimal footer
     elements.append(Spacer(1, 5))
     
-    # Simple footer text centered with smaller font
     footer_text = "This is a computer generated quotation, no signature required."
     
     footer = Paragraph(footer_text, 
@@ -1242,14 +1077,27 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
                                     textColor=secondary_color))
     elements.append(footer)
     
-    # Build the PDF
+    elements.append(Spacer(1, 20))
+    stamp_box = Table(
+        [[Paragraph('<b>Stamp & Signature</b>', ParagraphStyle(name='StampLabel', fontSize=9, alignment=1, fontName='Helvetica'))],
+         [""]],
+        colWidths=[150], rowHeights=[15, 40]
+    )
+    stamp_box.setStyle(TableStyle([
+        ('BOX', (0, 0), (0, 1), 1, colors.HexColor('#1A8CFF')),
+        ('ALIGN', (0, 0), (0, 1), 'CENTER'),
+        ('VALIGN', (0, 0), (0, 1), 'BOTTOM'),
+        ('TOPPADDING', (0, 0), (0, 0), 2),
+        ('BOTTOMPADDING', (0, 1), (0, 1), 10),
+    ]))
+    elements.append(Table([["", stamp_box]], colWidths=[390, 150], hAlign='RIGHT'))
+    
     doc.build(elements)
     buffer.seek(0)
     return buffer
 
 @app.route('/api/product_sales/<int:product_id>')
 def product_sales(product_id):
-    # Get all bill items for this product
     sales = db.session.query(
         BillItem,
         Bill,
@@ -1340,7 +1188,6 @@ def export_inventory():
 @app.route('/view_bill/<int:bill_id>')
 def view_bill(bill_id):
     bill = Bill.query.get_or_404(bill_id)
-    # Calculate subtotal and total tax
     subtotal = sum(item.price * item.quantity for item in bill.items)
     total_tax = sum(item.price * item.quantity * (item.tax_rate or 0) / 100 for item in bill.items)
     settings = Settings.query.first()
@@ -1385,7 +1232,6 @@ def reset_db():
     if current_user.role != 'admin':
         flash('Access denied. Admin privileges required.', 'danger')
         return redirect(url_for('index'))
-    # Clear all data from all tables except User
     for table in reversed(db.metadata.sorted_tables):
         if table.name != 'user':
             db.session.execute(table.delete())
@@ -1395,15 +1241,12 @@ def reset_db():
 
 def recreate_database():
     with app.app_context():
-        # Drop all tables
         db.drop_all()
-        # Create all tables
         db.create_all()
-        # Create admin user if none exists
         admin = User.query.filter_by(username='admin').first()
         if not admin:
             admin = User(username='admin', role='admin')
-            admin.set_password('admin123')  # Change this password in production!
+            admin.set_password('admin123')
             db.session.add(admin)
             db.session.commit()
             print("Admin user created!")
@@ -1412,7 +1255,6 @@ def recreate_database():
 @login_required
 def delete_bill(id):
     bill = Bill.query.get_or_404(id)
-    # Delete all bill items first
     for item in bill.items:
         db.session.delete(item)
     db.session.delete(bill)
