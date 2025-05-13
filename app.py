@@ -65,6 +65,7 @@ class Item(db.Model):
     hsn_sac_number = db.Column(db.String(20), nullable=True)  # HSN/SAC number
     tax_rate = db.Column(db.Float, nullable=True, default=0.0)  # percent
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    default_unit = db.Column(db.String(32), nullable=True)  # New column for default unit
 
 class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -98,6 +99,7 @@ class BillItem(db.Model):
     quantity = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Float, nullable=False)
     tax_rate = db.Column(db.Float, nullable=True, default=0.0)
+    unit = db.Column(db.String(32), nullable=True)  # New column for unit
     item = db.relationship('Item')
 
 class Quotation(db.Model):
@@ -208,7 +210,11 @@ def add_item():
         stock = int(request.form['stock'])
         hsn_sac_number = request.form['hsn_sac_number'] if request.form['hsn_sac_number'] else None
         tax_rate = float(request.form['tax_rate']) if request.form['tax_rate'] else 0.0
-        new_item = Item(name=name, description=description, price=price, stock=stock, hsn_sac_number=hsn_sac_number, tax_rate=tax_rate)
+        # Handle default unit
+        default_unit = request.form['default_unit']
+        if default_unit == 'Other':
+            default_unit = request.form['default_unit_other']
+        new_item = Item(name=name, description=description, price=price, stock=stock, hsn_sac_number=hsn_sac_number, tax_rate=tax_rate, default_unit=default_unit)
         db.session.add(new_item)
         db.session.commit()
         flash('Item added successfully!')
@@ -228,14 +234,27 @@ def create_bill():
             address = customer.address
             gstin = customer.gstin
         else:
-            customer_name = request.form.get('customer_name', '').strip() or 'Walk-in Customer'
-            mobile_number = request.form.get('mobile_number', '').strip()
-            email = request.form.get('email', '').strip()
-            address = request.form.get('address', '').strip()
-            gstin = request.form.get('gstin', '').strip()
+            # Handle walk-in customer
+            customer_name = request.form.get('customer_name', '').strip()
+            if not customer_name:
+                customer_name = 'Walk-in Customer'
+            mobile_number = request.form.get('mobile_number', '').strip() or None
+            email = request.form.get('email', '').strip() or None
+            address = request.form.get('address', '').strip() or None
+            gstin = request.form.get('gstin', '').strip() or None
         payment_mode = request.form.get('payment_mode')
         items = request.form.getlist('items[]')
         quantities = request.form.getlist('quantities[]')
+        units = request.form.getlist('units[]')
+        unit_others = request.form.getlist('unit_others[]')
+        
+        # Check for stock availability before creating the bill
+        for idx, (item_id, quantity) in enumerate(zip(items, quantities)):
+            if int(quantity) > 0:
+                item = Item.query.get(item_id)
+                if item and int(quantity) > item.stock:
+                    flash(f'Cannot bill more than available stock for item: {item.name} (Available: {item.stock}, Requested: {quantity})', 'danger')
+                    return redirect(url_for('create_bill'))
         
         # Generate invoice number
         now = datetime.now()
@@ -263,10 +282,12 @@ def create_bill():
         )
         db.session.add(bill)
         
-        for item_id, quantity in zip(items, quantities):
+        for idx, (item_id, quantity) in enumerate(zip(items, quantities)):
             if int(quantity) > 0:
                 item = Item.query.get(item_id)
                 if item:
+                    # Determine the unit
+                    unit = units[idx] if units[idx] != 'Other' else unit_others[idx]
                     item_tax = item.tax_rate or 0.0
                     item_subtotal = item.price * int(quantity)
                     item_tax_amount = item_subtotal * (item_tax / 100)
@@ -277,7 +298,8 @@ def create_bill():
                         item=item,
                         quantity=int(quantity),
                         price=item.price,
-                        tax_rate=item_tax
+                        tax_rate=item_tax,
+                        unit=unit
                     )
                     db.session.add(bill_item)
         
@@ -287,8 +309,8 @@ def create_bill():
 
         # (REMOVED inventory update logic from here)
 
-        flash(f'Bill created successfully! <a href="/download_bill/{bill.id}" class="alert-link">Download Bill</a>')
-        return redirect(url_for('index'))
+        flash('Bill created successfully!', 'success')
+        return redirect(url_for('view_bills'))
     
     items = Item.query.all()
     customers = Customer.query.order_by(Customer.name).all()
@@ -339,10 +361,9 @@ def settings():
 
 def generate_bill_pdf(bill, subtotal, total_tax):
     buffer = BytesIO()
-    # Use slightly smaller margins to match example
     doc = SimpleDocTemplate(buffer, pagesize=letter, 
                            rightMargin=20, leftMargin=40, 
-                           topMargin=20, bottomMargin=20)
+                           topMargin=8, bottomMargin=20)
     elements = []
     styles = getSampleStyleSheet()
     
@@ -399,41 +420,29 @@ def generate_bill_pdf(bill, subtotal, total_tax):
         ('BOTTOMPADDING', (0, 0), (0, 0), 4),
     ]))
     elements.append(top_banner)
-    elements.append(Spacer(1, 24))  # Increased vertical space before company name
 
-    # Logo at the top left, close to the banner
+    # Logo at the top left, immediately left of the company name, almost zero padding
     logo_path = os.path.join('static', 'logo.png')
     logo_data = None
     if os.path.exists(logo_path):
-        img = Image(logo_path, width=80, height=80)
+        img = Image(logo_path, width=40, height=40)
         logo_data = img
     else:
         logo_data = Paragraph("", styles['NormalText'])
-    logo_table = Table([[logo_data]], colWidths=[80])
-    logo_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-        ('VALIGN', (0, 0), (0, 0), 'TOP'),
-        ('TOPPADDING', (0, 0), (0, 0), 0),
-        ('BOTTOMPADDING', (0, 0), (0, 0), 0),
-        ('LEFTPADDING', (0, 0), (0, 0), 0),
-        ('RIGHTPADDING', (0, 0), (0, 0), 0),
-    ]))
-    # Add a row with logo left, company name centered, empty right
+    # Header row: logo and company name close together, minimal padding
     company_name = settings.company_name if settings and settings.company_name else ""
-    company_name_para = Paragraph(company_name, ParagraphStyle(name='CenteredCompanyName', fontSize=28, leading=32, alignment=1, fontName='Helvetica-Bold', textColor=primary_color))
-    header_row = Table([[logo_data, company_name_para, ""]], colWidths=[80, 380, 80])
-    header_row.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-        ('ALIGN', (1, 0), (1, 0), 'CENTER'),
-        ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
-        ('VALIGN', (0, 0), (2, 0), 'TOP'),
-        ('LEFTPADDING', (0, 0), (2, 0), 0),
-        ('RIGHTPADDING', (0, 0), (2, 0), 0),
-        ('TOPPADDING', (0, 0), (2, 0), 0),
-        ('BOTTOMPADDING', (0, 0), (2, 0), 0),
+    company_name_para = Paragraph(company_name, ParagraphStyle(name='CenteredCompanyName', fontSize=14, leading=18, alignment=0, fontName='Helvetica-Bold', textColor=primary_color))
+    # Center the logo and company name as a group
+    logo_name_row = Table([[logo_data, company_name_para]], colWidths=[42, 200], hAlign='CENTER')
+    logo_name_row.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (1, 0), 'CENTER'),
+        ('VALIGN', (0, 0), (1, 0), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (1, 0), 0),
+        ('RIGHTPADDING', (0, 0), (1, 0), 0),
+        ('TOPPADDING', (0, 0), (1, 0), 0),
+        ('BOTTOMPADDING', (0, 0), (1, 0), 0),
     ]))
-    elements.append(header_row)
-    elements.append(Spacer(1, 8))
+    elements.append(logo_name_row)
 
     # Prepare customer details box (BILLED TO)
     customer_box_data = []
@@ -595,9 +604,9 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     row_style_list.extend([
         ('BACKGROUND', (5, total_row_index), (6, total_row_index), colors.white),
         ('BACKGROUND', (5, total_row_index+1), (6, total_row_index+1), colors.white),
-        ('BACKGROUND', (5, total_row_index+2), (6, total_row_index+2), accent_color),
-        ('TEXTCOLOR', (5, total_row_index+2), (5, total_row_index+2), colors.white),
-        ('TEXTCOLOR', (6, total_row_index+2), (6, total_row_index+2), colors.white),
+        ('BACKGROUND', (5, total_row_index+2), (6, total_row_index+2), colors.white),
+        ('TEXTCOLOR', (5, total_row_index+2), (5, total_row_index+2), text_color),
+        ('TEXTCOLOR', (6, total_row_index+2), (6, total_row_index+2), text_color),
         ('SPAN', (0, total_row_index), (4, total_row_index)),
         ('SPAN', (0, total_row_index+1), (4, total_row_index+1)),
         ('SPAN', (0, total_row_index+2), (4, total_row_index+2)),
@@ -618,17 +627,22 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     elements.append(Spacer(1, 20))
     
     # Terms and conditions in one compact line
-    terms_text = "Terms & Conditions: 1. Goods once sold will not be taken back or exchanged. 2. Subject to local jurisdiction. 3. Payment due within 30 days. 4. E. & O.E. 5. Interest @ 24% p.a. for late payments. 6. All disputes subject to local jurisdiction."
+    terms_text = "Terms & Conditions: 1. Goods once sold will not be taken back or exchanged. 2. Subject to local jurisdiction."
     
     terms = Paragraph(terms_text, 
                      ParagraphStyle(name='CompactTerms', 
                                    fontSize=6, 
-                                   leading=8, 
+                                   leading=7, 
                                    alignment=0, 
                                    fontName='Helvetica', 
-                                   textColor=secondary_color))
+                                   textColor=secondary_color,
+                                   leftIndent=0,
+                                   rightIndent=0,
+                                   spaceBefore=0,
+                                   spaceAfter=0,
+                                   ))
     elements.append(terms)
-    elements.append(Spacer(1, 3))
+    elements.append(Spacer(1, 1))
     
     # Thank you message matching the example
     thank_you = Table([
@@ -659,6 +673,23 @@ def generate_bill_pdf(bill, subtotal, total_tax):
                                     fontName='Helvetica', 
                                     textColor=secondary_color))
     elements.append(footer)
+    
+    # Add Stamp & Signature box at the bottom right, flush with right margin
+    elements.append(Spacer(1, 20))
+    stamp_box = Table(
+        [[Paragraph('<b>Stamp & Signature</b>', ParagraphStyle(name='StampLabel', fontSize=9, alignment=1, fontName='Helvetica'))],
+         [""]],
+        colWidths=[150], rowHeights=[15, 40]
+    )
+    stamp_box.setStyle(TableStyle([
+        ('BOX', (0, 0), (0, 1), 1, colors.HexColor('#1A8CFF')),
+        ('ALIGN', (0, 0), (0, 1), 'CENTER'),
+        ('VALIGN', (0, 0), (0, 1), 'BOTTOM'),
+        ('TOPPADDING', (0, 0), (0, 0), 2),
+        ('BOTTOMPADDING', (0, 1), (0, 1), 10),
+    ]))
+    # Right align the box flush with the right margin
+    elements.append(Table([["", stamp_box]], colWidths=[390, 150], hAlign='RIGHT'))
     
     # Build the PDF
     doc.build(elements)
@@ -741,7 +772,6 @@ def edit_item(id):
     if 'user_id' not in session:
         flash('Please login to edit items!', 'warning')
         return redirect(url_for('login'))
-        
     item = Item.query.get_or_404(id)
     if request.method == 'POST':
         # Store old values
@@ -751,9 +781,9 @@ def edit_item(id):
             'price': item.price,
             'stock': item.stock,
             'hsn_sac_number': item.hsn_sac_number,
-            'tax_rate': item.tax_rate
+            'tax_rate': item.tax_rate,
+            'default_unit': item.default_unit
         }
-        
         # Update item
         item.name = request.form['name']
         item.description = request.form['description']
@@ -761,7 +791,11 @@ def edit_item(id):
         item.stock = int(request.form['stock'])
         item.hsn_sac_number = request.form['hsn_sac_number'] if request.form['hsn_sac_number'] else None
         item.tax_rate = float(request.form['tax_rate']) if request.form['tax_rate'] else 0.0
-        
+        # Handle default unit
+        default_unit = request.form['default_unit']
+        if default_unit == 'Other':
+            default_unit = request.form['default_unit_other']
+        item.default_unit = default_unit
         # Store new values
         new_values = {
             'name': item.name,
@@ -769,9 +803,9 @@ def edit_item(id):
             'price': item.price,
             'stock': item.stock,
             'hsn_sac_number': item.hsn_sac_number,
-            'tax_rate': item.tax_rate
+            'tax_rate': item.tax_rate,
+            'default_unit': item.default_unit
         }
-        
         # Create history entry
         history = InventoryHistory(
             item_id=item.id,
@@ -911,10 +945,9 @@ def quotations():
 
 def generate_quotation_pdf(quotation, subtotal, total_tax):
     buffer = BytesIO()
-    # Use slightly smaller margins to match example
     doc = SimpleDocTemplate(buffer, pagesize=letter, 
                            rightMargin=20, leftMargin=40, 
-                           topMargin=20, bottomMargin=20)
+                           topMargin=8, bottomMargin=20)
     elements = []
     styles = getSampleStyleSheet()
     
@@ -971,41 +1004,29 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
         ('BOTTOMPADDING', (0, 0), (0, 0), 4),
     ]))
     elements.append(top_banner)
-    elements.append(Spacer(1, 24))  # Increased vertical space before company name
 
-    # Logo at the top left, close to the banner
+    # Logo at the top left, immediately left of the company name, almost zero padding
     logo_path = os.path.join('static', 'logo.png')
     logo_data = None
     if os.path.exists(logo_path):
-        img = Image(logo_path, width=80, height=80)
+        img = Image(logo_path, width=40, height=40)
         logo_data = img
     else:
         logo_data = Paragraph("", styles['NormalText'])
-    logo_table = Table([[logo_data]], colWidths=[80])
-    logo_table.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-        ('VALIGN', (0, 0), (0, 0), 'TOP'),
-        ('TOPPADDING', (0, 0), (0, 0), 0),
-        ('BOTTOMPADDING', (0, 0), (0, 0), 0),
-        ('LEFTPADDING', (0, 0), (0, 0), 0),
-        ('RIGHTPADDING', (0, 0), (0, 0), 0),
-    ]))
-    # Add a row with logo left, company name centered, empty right
+    # Header row: logo and company name close together, minimal padding
     company_name = settings.company_name if settings and settings.company_name else ""
-    company_name_para = Paragraph(company_name, ParagraphStyle(name='CenteredCompanyName', fontSize=28, leading=32, alignment=1, fontName='Helvetica-Bold', textColor=primary_color))
-    header_row = Table([[logo_data, company_name_para, ""]], colWidths=[80, 380, 80])
-    header_row.setStyle(TableStyle([
-        ('ALIGN', (0, 0), (0, 0), 'LEFT'),
-        ('ALIGN', (1, 0), (1, 0), 'CENTER'),
-        ('ALIGN', (2, 0), (2, 0), 'RIGHT'),
-        ('VALIGN', (0, 0), (2, 0), 'TOP'),
-        ('LEFTPADDING', (0, 0), (2, 0), 0),
-        ('RIGHTPADDING', (0, 0), (2, 0), 0),
-        ('TOPPADDING', (0, 0), (2, 0), 0),
-        ('BOTTOMPADDING', (0, 0), (2, 0), 0),
+    company_name_para = Paragraph(company_name, ParagraphStyle(name='CenteredCompanyName', fontSize=14, leading=18, alignment=0, fontName='Helvetica-Bold', textColor=primary_color))
+    # Center the logo and company name as a group
+    logo_name_row = Table([[logo_data, company_name_para]], colWidths=[42, 200], hAlign='CENTER')
+    logo_name_row.setStyle(TableStyle([
+        ('ALIGN', (0, 0), (1, 0), 'CENTER'),
+        ('VALIGN', (0, 0), (1, 0), 'MIDDLE'),
+        ('LEFTPADDING', (0, 0), (1, 0), 0),
+        ('RIGHTPADDING', (0, 0), (1, 0), 0),
+        ('TOPPADDING', (0, 0), (1, 0), 0),
+        ('BOTTOMPADDING', (0, 0), (1, 0), 0),
     ]))
-    elements.append(header_row)
-    elements.append(Spacer(1, 8))
+    elements.append(logo_name_row)
 
     # Prepare customer details box (QUOTED TO)
     customer_box_data = []
@@ -1167,9 +1188,9 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
     row_style_list.extend([
         ('BACKGROUND', (5, total_row_index), (6, total_row_index), colors.white),
         ('BACKGROUND', (5, total_row_index+1), (6, total_row_index+1), colors.white),
-        ('BACKGROUND', (5, total_row_index+2), (6, total_row_index+2), accent_color),
-        ('TEXTCOLOR', (5, total_row_index+2), (5, total_row_index+2), colors.white),
-        ('TEXTCOLOR', (6, total_row_index+2), (6, total_row_index+2), colors.white),
+        ('BACKGROUND', (5, total_row_index+2), (6, total_row_index+2), colors.white),
+        ('TEXTCOLOR', (5, total_row_index+2), (5, total_row_index+2), text_color),
+        ('TEXTCOLOR', (6, total_row_index+2), (6, total_row_index+2), text_color),
         ('SPAN', (0, total_row_index), (4, total_row_index)),
         ('SPAN', (0, total_row_index+1), (4, total_row_index+1)),
         ('SPAN', (0, total_row_index+2), (4, total_row_index+2)),
@@ -1193,12 +1214,17 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
     terms = Paragraph(terms_text, 
                      ParagraphStyle(name='CompactTerms', 
                                    fontSize=6, 
-                                   leading=8, 
+                                   leading=7, 
                                    alignment=0, 
                                    fontName='Helvetica', 
-                                   textColor=secondary_color))
+                                   textColor=secondary_color,
+                                   leftIndent=0,
+                                   rightIndent=0,
+                                   spaceBefore=0,
+                                   spaceAfter=0,
+                                   ))
     elements.append(terms)
-    elements.append(Spacer(1, 3))
+    elements.append(Spacer(1, 1))
     
     # Thank you message
     thank_you = Table([
@@ -1395,6 +1421,30 @@ def recreate_database():
             db.session.add(admin)
             db.session.commit()
             print("Admin user created!")
+
+@app.route('/delete_bill/<int:id>', methods=['POST'])
+@login_required
+def delete_bill(id):
+    bill = Bill.query.get_or_404(id)
+    # Delete all bill items first
+    for item in bill.items:
+        db.session.delete(item)
+    db.session.delete(bill)
+    db.session.commit()
+    flash('Bill deleted successfully!', 'success')
+    return redirect(url_for('view_bills'))
+
+@app.route('/delete_item/<int:id>', methods=['POST'])
+@login_required
+def delete_item(id):
+    item = Item.query.get_or_404(id)
+    # Delete all related inventory history records
+    for history in item.history:
+        db.session.delete(history)
+    db.session.delete(item)
+    db.session.commit()
+    flash('Item deleted successfully!', 'success')
+    return redirect(url_for('index'))
 
 if __name__ == '__main__':
     recreate_database()

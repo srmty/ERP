@@ -32,6 +32,16 @@
           <label for="tax_rate" class="form-label">Tax Rate (%)</label>
           <input type="number" class="form-control" id="tax_rate" name="tax_rate" step="0.01" min="0" max="100" placeholder="e.g. 18">
         </div>
+        <div class="col-md-4">
+          <label for="default_unit" class="form-label">Default Unit</label>
+          <select class="form-select unit-select" id="default_unit" name="default_unit" required>
+            <option value="Unit">Unit</option>
+            <option value="Packet">Packet</option>
+            <option value="Meter">Meter</option>
+            <option value="Other">Other</option>
+          </select>
+          <input type="text" class="form-control unit-other mt-1" id="default_unit_other" name="default_unit_other" placeholder="Enter unit" style="display:none;">
+        </div>
       </div>
       <div class="mt-4">
         <button type="submit" class="btn btn-success px-4">Add Item</button>
@@ -54,5 +64,21 @@
         }, false)
     })
 })()
+
+document.addEventListener('DOMContentLoaded', function() {
+  const unitSelect = document.getElementById('default_unit');
+  const unitOther = document.getElementById('default_unit_other');
+  if (unitSelect) {
+    unitSelect.addEventListener('change', function() {
+      if (this.value === 'Other') {
+        unitOther.style.display = '';
+        unitOther.required = true;
+      } else {
+        unitOther.style.display = 'none';
+        unitOther.required = false;
+      }
+    });
+  }
+});
 </script>
 {% endblock %} 

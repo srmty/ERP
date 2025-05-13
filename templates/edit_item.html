@@ -34,6 +34,16 @@
                             <label for="tax_rate" class="form-label">Tax Rate (%)</label>
                             <input type="number" step="0.01" class="form-control" id="tax_rate" name="tax_rate" value="{{ item.tax_rate or 0 }}">
                         </div>
+                        <div class="mb-3">
+                            <label for="default_unit" class="form-label">Default Unit</label>
+                            <select class="form-select unit-select" id="default_unit" name="default_unit" required>
+                                <option value="Unit" {% if item.default_unit == 'Unit' %}selected{% endif %}>Unit</option>
+                                <option value="Packet" {% if item.default_unit == 'Packet' %}selected{% endif %}>Packet</option>
+                                <option value="Meter" {% if item.default_unit == 'Meter' %}selected{% endif %}>Meter</option>
+                                <option value="Other" {% if item.default_unit not in ['Unit', 'Packet', 'Meter', None] %}selected{% endif %}>Other</option>
+                            </select>
+                            <input type="text" class="form-control unit-other mt-1" id="default_unit_other" name="default_unit_other" placeholder="Enter unit" style="display: {% if item.default_unit not in ['Unit', 'Packet', 'Meter', None] %}block{% else %}none{% endif %};" value="{% if item.default_unit not in ['Unit', 'Packet', 'Meter', None] %}{{ item.default_unit }}{% endif %}">
+                        </div>
                         <div class="d-grid gap-2">
                             <button type="submit" class="btn btn-primary">Update Item</button>
                             <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
@@ -44,4 +54,22 @@
         </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const unitSelect = document.getElementById('default_unit');
+  const unitOther = document.getElementById('default_unit_other');
+  if (unitSelect) {
+    unitSelect.addEventListener('change', function() {
+      if (this.value === 'Other') {
+        unitOther.style.display = '';
+        unitOther.required = true;
+      } else {
+        unitOther.style.display = 'none';
+        unitOther.required = false;
+      }
+    });
+  }
+});
+</script>
 {% endblock %} 

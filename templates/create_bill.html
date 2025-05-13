@@ -53,6 +53,7 @@
                             <th>Quantity</th>
                             <th>Price</th>
                             <th>Total</th>
+                            <th>Unit</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -62,7 +63,7 @@
                                 <select class="form-select item-select" name="items[]" required>
                                     <option value="">Select Item</option>
                                     {% for item in items %}
-                                    <option value="{{ item.id }}" data-price="{{ item.price }}" data-stock="{{ item.quantity }}">
+                                    <option value="{{ item.id }}" data-price="{{ item.price }}" data-stock="{{ item.quantity }}" data-unit="{{ item.default_unit }}">
                                         {{ item.name }} ({{ item.price }})
                                     </option>
                                     {% endfor %}
@@ -78,6 +79,18 @@
                                 <input type="number" class="form-control total" name="totals[]" readonly>
                             </td>
                             <td>
+                                <select class="form-select unit-select" name="units[]" required>
+                                    <option value="Unit">Unit</option>
+                                    <option value="Packet">Packet</option>
+                                    <option value="Meter">Meter</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                                <input type="text" class="form-control unit-other mt-1" name="unit_others[]" placeholder="Enter unit" style="display:none;">
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-warning btn-sm clear-row me-1" title="Clear Row">
+                                    <i class="fas fa-eraser"></i>
+                                </button>
                                 <button type="button" class="btn btn-danger btn-sm remove-row">
                                     <i class="fas fa-trash"></i>
                                 </button>
@@ -146,12 +159,31 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // Add event listeners
         addRowEventListeners(newRow);
+        addUnitEventListeners(newRow);
         tbody.appendChild(newRow);
         initSelect2();
     });
 
     // Add event listeners to initial row
     addRowEventListeners(table.querySelector('tbody tr'));
+
+    // Add event listener for unit select
+    function addUnitEventListeners(row) {
+        const unitSelect = row.querySelector('.unit-select');
+        const unitOther = row.querySelector('.unit-other');
+        if (unitSelect) {
+            unitSelect.addEventListener('change', function() {
+                if (this.value === 'Other') {
+                    unitOther.style.display = '';
+                    unitOther.required = true;
+                } else {
+                    unitOther.style.display = 'none';
+                    unitOther.required = false;
+                }
+            });
+        }
+    }
+    addUnitEventListeners(table.querySelector('tbody tr'));
 
     // Remove row
     table.addEventListener('click', function(e) {
@@ -162,6 +194,16 @@ document.addEventListener('DOMContentLoaded', function() {
                 updateGrandTotal();
             }
         }
+        // Clear row
+        if (e.target.closest('.clear-row')) {
+            const row = e.target.closest('tr');
+            row.querySelector('.item-select').selectedIndex = 0;
+            $(row.querySelector('.item-select')).val('').trigger('change');
+            row.querySelector('.quantity').value = '';
+            row.querySelector('.price').value = '';
+            row.querySelector('.total').value = '';
+            updateGrandTotal();
+        }
     });
 
     function addRowEventListeners(row) {
@@ -169,6 +211,8 @@ document.addEventListener('DOMContentLoaded', function() {
         const quantityInput = row.querySelector('.quantity');
         const priceInput = row.querySelector('.price');
         const totalInput = row.querySelector('.total');
+        const unitSelect = row.querySelector('.unit-select');
+        const unitOther = row.querySelector('.unit-other');
 
         // Native change event
         itemSelect.addEventListener('change', function() {
@@ -184,6 +228,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 totalInput.value = '';
             }
             updateGrandTotal();
+
+            // Pre-select default unit if available
+            const defaultUnit = option.getAttribute('data-unit');
+            if (defaultUnit) {
+                let found = false;
+                for (let i = 0; i < unitSelect.options.length; i++) {
+                    if (unitSelect.options[i].value === defaultUnit) {
+                        unitSelect.selectedIndex = i;
+                        unitOther.style.display = 'none';
+                        unitOther.value = '';
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    unitSelect.value = 'Other';
+                    unitOther.style.display = '';
+                    unitOther.value = defaultUnit;
+                }
+            }
         });
 
         // Select2 event
@@ -232,7 +296,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function toggleWalkinFields() {
         if (!customerSelect.value) {
             walkinFields.style.display = '';
-            walkinFields.querySelectorAll('input').forEach(i => i.required = true);
+            walkinFields.querySelectorAll('input').forEach(i => i.required = false);
         } else {
             walkinFields.style.display = 'none';
             walkinFields.querySelectorAll('input').forEach(i => i.required = false);
