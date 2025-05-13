@@ -120,7 +120,50 @@ class InventoryHistory(db.Model):
 @app.route('/')
 def index():
     items = Item.query.order_by(Item.name).all()
-    return render_template('index.html', items=items)
+    
+    # Calculate total sales
+    total_sales = db.session.query(db.func.sum(Bill.total_amount)).scalar() or 0
+    
+    # Calculate today's sales
+    today = datetime.utcnow().date()
+    today_sales = db.session.query(db.func.sum(Bill.total_amount))\
+        .filter(db.func.date(Bill.created_at) == today).scalar() or 0
+    
+    # Calculate monthly sales
+    first_day = today.replace(day=1)
+    monthly_sales = db.session.query(db.func.sum(Bill.total_amount))\
+        .filter(db.func.date(Bill.created_at) >= first_day).scalar() or 0
+    
+    # Calculate average bill amount
+    total_bills = Bill.query.count()
+    avg_bill_amount = total_sales / total_bills if total_bills > 0 else 0
+    
+    # Get total customers
+    total_customers = Customer.query.count()
+    
+    # Get total bills count
+    total_bills = Bill.query.count()
+    
+    # Count low stock items (less than 10)
+    low_stock_items = Item.query.filter(Item.stock < 10).count()
+    
+    # Calculate total inventory value
+    total_inventory_value = db.session.query(db.func.sum(Item.price * Item.stock)).scalar() or 0
+    
+    # Get recent bills
+    recent_bills = Bill.query.order_by(Bill.created_at.desc()).limit(5).all()
+    
+    return render_template('index.html',
+                         items=items,
+                         total_sales=total_sales,
+                         today_sales=today_sales,
+                         monthly_sales=monthly_sales,
+                         avg_bill_amount=avg_bill_amount,
+                         total_customers=total_customers,
+                         total_bills=total_bills,
+                         low_stock_items=low_stock_items,
+                         total_inventory_value=total_inventory_value,
+                         recent_bills=recent_bills)
 
 @app.route('/add_item', methods=['GET', 'POST'])
 def add_item():
