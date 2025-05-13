@@ -1272,10 +1272,9 @@ def force_delete_item(id):
         if not item:
             flash('Item not found!', 'danger')
             return redirect(url_for('index'))
-        # Set item_id to NULL in BillItem, QuotationItem, and InventoryHistory
+        # Set item_id to NULL in BillItem and QuotationItem
         BillItem.query.filter_by(item_id=id).update({BillItem.item_id: None})
         QuotationItem.query.filter_by(item_id=id).update({QuotationItem.item_id: None})
-        InventoryHistory.query.filter_by(item_id=id).update({InventoryHistory.item_id: None})
         db.session.delete(item)
         db.session.commit()
         flash('Item force deleted. Related records will show "Not Available".', 'warning')
