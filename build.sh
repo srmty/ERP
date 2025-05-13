@@ -17,6 +17,9 @@ flask db upgrade
 echo "Initializing database and creating admin user..."
 python init_db.py
 
+echo "Verifying admin user..."
+python -c "from app import app, db, User; app.app_context().push(); admin = User.query.filter_by(username='admin').first(); print(f'Admin exists: {admin is not None}')"
+
 echo "Build process completed!"
 
 echo "Starting Gunicorn server..."
