@@ -112,6 +112,7 @@ class Settings(db.Model):
 class InventoryHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
     action = db.Column(db.String(50), nullable=False)
     old_values = db.Column(db.Text)
     new_values = db.Column(db.Text)
@@ -710,13 +711,14 @@ def edit_item(id):
                 'tax_rate': item.tax_rate
             }
             
-            # Create inventory history entry
+            # Create inventory history entry without user_id
             history = InventoryHistory(
                 item_id=item.id,
                 action='edit',
                 old_values=json.dumps(old_values),
                 new_values=json.dumps(new_values),
-                created_at=datetime.utcnow()
+                created_at=datetime.utcnow(),
+                user_id=None  # Explicitly set user_id to None
             )
             db.session.add(history)
             
