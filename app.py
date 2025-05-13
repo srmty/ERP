@@ -65,7 +65,6 @@ class Item(db.Model):
     hsn_sac_number = db.Column(db.String(20), nullable=True)  # HSN/SAC number
     tax_rate = db.Column(db.Float, nullable=True, default=0.0)  # percent
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    default_unit = db.Column(db.String(32), nullable=True)  # New column for default unit
 
 class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -99,7 +98,6 @@ class BillItem(db.Model):
     quantity = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Float, nullable=False)
     tax_rate = db.Column(db.Float, nullable=True, default=0.0)
-    unit = db.Column(db.String(32), nullable=True)  # New column for unit
     item = db.relationship('Item')
 
 class Quotation(db.Model):
@@ -210,11 +208,7 @@ def add_item():
         stock = int(request.form['stock'])
         hsn_sac_number = request.form['hsn_sac_number'] if request.form['hsn_sac_number'] else None
         tax_rate = float(request.form['tax_rate']) if request.form['tax_rate'] else 0.0
-        # Handle default unit
-        default_unit = request.form['default_unit']
-        if default_unit == 'Other':
-            default_unit = request.form['default_unit_other']
-        new_item = Item(name=name, description=description, price=price, stock=stock, hsn_sac_number=hsn_sac_number, tax_rate=tax_rate, default_unit=default_unit)
+        new_item = Item(name=name, description=description, price=price, stock=stock, hsn_sac_number=hsn_sac_number, tax_rate=tax_rate)
         db.session.add(new_item)
         db.session.commit()
         flash('Item added successfully!')
@@ -245,15 +239,13 @@ def create_bill():
         payment_mode = request.form.get('payment_mode')
         items = request.form.getlist('items[]')
         quantities = request.form.getlist('quantities[]')
-        units = request.form.getlist('units[]')
-        unit_others = request.form.getlist('unit_others[]')
         
-        # Check for stock availability before creating the bill
-        for idx, (item_id, quantity) in enumerate(zip(items, quantities)):
+        # Check stock levels before processing
+        for item_id, quantity in zip(items, quantities):
             if int(quantity) > 0:
                 item = Item.query.get(item_id)
                 if item and int(quantity) > item.stock:
-                    flash(f'Cannot bill more than available stock for item: {item.name} (Available: {item.stock}, Requested: {quantity})', 'danger')
+                    flash(f'Insufficient stock for {item.name}. Available: {item.stock}, Requested: {quantity}', 'danger')
                     return redirect(url_for('create_bill'))
         
         # Generate invoice number
@@ -282,12 +274,10 @@ def create_bill():
         )
         db.session.add(bill)
         
-        for idx, (item_id, quantity) in enumerate(zip(items, quantities)):
+        for item_id, quantity in zip(items, quantities):
             if int(quantity) > 0:
                 item = Item.query.get(item_id)
                 if item:
-                    # Determine the unit
-                    unit = units[idx] if units[idx] != 'Other' else unit_others[idx]
                     item_tax = item.tax_rate or 0.0
                     item_subtotal = item.price * int(quantity)
                     item_tax_amount = item_subtotal * (item_tax / 100)
@@ -298,16 +288,15 @@ def create_bill():
                         item=item,
                         quantity=int(quantity),
                         price=item.price,
-                        tax_rate=item_tax,
-                        unit=unit
+                        tax_rate=item_tax
                     )
                     db.session.add(bill_item)
+                    # Update stock
+                    item.stock -= int(quantity)
         
         total_amount = subtotal + total_tax
         bill.total_amount = total_amount
         db.session.commit()
-
-        # (REMOVED inventory update logic from here)
 
         flash('Bill created successfully!', 'success')
         return redirect(url_for('view_bills'))
@@ -772,6 +761,7 @@ def edit_item(id):
     if 'user_id' not in session:
         flash('Please login to edit items!', 'warning')
         return redirect(url_for('login'))
+        
     item = Item.query.get_or_404(id)
     if request.method == 'POST':
         # Store old values
@@ -781,9 +771,9 @@ def edit_item(id):
             'price': item.price,
             'stock': item.stock,
             'hsn_sac_number': item.hsn_sac_number,
-            'tax_rate': item.tax_rate,
-            'default_unit': item.default_unit
+            'tax_rate': item.tax_rate
         }
+        
         # Update item
         item.name = request.form['name']
         item.description = request.form['description']
@@ -791,11 +781,7 @@ def edit_item(id):
         item.stock = int(request.form['stock'])
         item.hsn_sac_number = request.form['hsn_sac_number'] if request.form['hsn_sac_number'] else None
         item.tax_rate = float(request.form['tax_rate']) if request.form['tax_rate'] else 0.0
-        # Handle default unit
-        default_unit = request.form['default_unit']
-        if default_unit == 'Other':
-            default_unit = request.form['default_unit_other']
-        item.default_unit = default_unit
+        
         # Store new values
         new_values = {
             'name': item.name,
@@ -803,9 +789,9 @@ def edit_item(id):
             'price': item.price,
             'stock': item.stock,
             'hsn_sac_number': item.hsn_sac_number,
-            'tax_rate': item.tax_rate,
-            'default_unit': item.default_unit
+            'tax_rate': item.tax_rate
         }
+        
         # Create history entry
         history = InventoryHistory(
             item_id=item.id,
@@ -1438,9 +1424,6 @@ def delete_bill(id):
 @login_required
 def delete_item(id):
     item = Item.query.get_or_404(id)
-    # Delete all related inventory history records
-    for history in item.history:
-        db.session.delete(history)
     db.session.delete(item)
     db.session.commit()
     flash('Item deleted successfully!', 'success')
