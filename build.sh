@@ -10,8 +10,11 @@ ls -la
 echo "Setting up Python environment..."
 pip install -r requirements.txt
 
-echo "Running database migrations..."
+echo "Setting up environment variables..."
 export FLASK_APP=app.py
+export FLASK_ENV=production
+
+echo "Running database migrations..."
 flask db upgrade
 
 echo "Initializing database and creating admin user..."
