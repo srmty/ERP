@@ -39,3 +39,9 @@ ENV/
 
 # Logs
 *.log
+
+__pycache__/
+*.pyc
+instance/
+*.db
+migrations/__pycache__/
