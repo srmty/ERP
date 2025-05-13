@@ -65,15 +65,18 @@
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'inventory_history' %}active{% endif %}" href="{{ url_for('inventory_history') }}">Inventory History</a>
-                    </li>
-                    <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'quotations' %}active{% endif %}" href="{{ url_for('quotations') }}">Quotations</a>
                     </li>
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}">
                             <i class="fas fa-cog me-1"></i>Settings
                         </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'export_inventory' %}active{% endif %}" href="{{ url_for('export_inventory') }}">Export Inventory</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'export_sales' %}active{% endif %}" href="{{ url_for('export_sales') }}">Export Sales</a>
                     </li>
                 </ul>
             </div>
