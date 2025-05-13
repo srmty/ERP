@@ -10,10 +10,6 @@
         .navbar-brand {
             font-weight: bold;
         }
-        .user-info {
-            color: #fff;
-            margin-right: 15px;
-        }
         .nav-link {
             position: relative;
         }
@@ -74,25 +70,12 @@
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'quotations' %}active{% endif %}" href="{{ url_for('quotations') }}">Quotations</a>
                     </li>
-                    {% if session.get('user_role') == 'admin' %}
                     <li class="nav-item">
                         <a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}">
                             <i class="fas fa-cog me-1"></i>Settings
                         </a>
                     </li>
-                    {% endif %}
                 </ul>
-                {% if session.get('user_id') %}
-                <div class="d-flex align-items-center">
-                    <span class="user-info">
-                        <i class="fas fa-user me-1"></i>
-                        {{ session.get('username', 'User') }}
-                    </span>
-                    <a href="/logout" class="btn btn-outline-light btn-sm">
-                        <i class="fas fa-sign-out-alt me-1"></i>Logout
-                    </a>
-                </div>
-                {% endif %}
             </div>
         </div>
     </nav>

@@ -1,36 +1,37 @@
-# ERP Website
+# Inventory Management System
 
-A comprehensive Enterprise Resource Planning (ERP) system built with Flask, featuring inventory management, billing, customer management, and reporting capabilities.
+A web-based inventory management system built with Flask and SQLAlchemy.
 
 ## Features
 
-- User Authentication with Role-based Access Control
-- Inventory Management
-- Customer Management
-- Billing System with PDF Generation
-- Quotation Management
-- Sales Reports and Analytics
-- Data Export (CSV)
-- Settings Management
+- Item management (add, edit, delete)
+- Bill generation
+- Customer management
+- Inventory history tracking
+- Quotation management
+- Sales analytics
+- PDF report generation
 
-## Tech Stack
+## Dependencies
 
-- Python 3.x
 - Flask
-- SQLAlchemy
-- Flask-Login
-- ReportLab (PDF Generation)
-- Bootstrap (Frontend)
+- Flask-SQLAlchemy
+- Flask-Migrate
+- python-dotenv
+- reportlab
+- Werkzeug
+- gunicorn
+- psycopg2-binary
 
-## Setup Instructions
+## Installation
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
-cd erp-website
+git clone https://github.com/yourusername/inventory-system.git
+cd inventory-system
 ```
 
-2. Create and activate virtual environment:
+2. Create and activate a virtual environment:
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
@@ -41,27 +42,43 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Run the application:
+4. Set up environment variables:
 ```bash
-python app.py
+export FLASK_APP=app.py
+export FLASK_ENV=development
 ```
 
-5. Access the application at `http://localhost:5000`
-
-## Default Admin Credentials
-
-- Username: admin
-- Password: admin123
-
-## Environment Variables
-
-Create a `.env` file in the root directory with the following variables:
-
+5. Initialize the database:
+```bash
+flask db upgrade
 ```
-SECRET_KEY=your-secret-key
-DATABASE_URL=sqlite:///erp.db
+
+6. Run the application:
+```bash
+flask run
 ```
+
+## Usage
+
+1. Access the application at `http://localhost:5000`
+2. Add items to your inventory
+3. Create bills for customers
+4. Track inventory history
+5. Generate quotations
+6. View sales analytics
+
+## Deployment
+
+The application can be deployed on Render.com:
+
+1. Create a new Web Service
+2. Connect your GitHub repository
+3. Set the following environment variables:
+   - `FLASK_APP=app.py`
+   - `FLASK_ENV=production`
+   - `DATABASE_URL=your_postgresql_url`
+   - `SECRET_KEY=your_secret_key`
 
 ## License
 
-MIT License 
+This project is licensed under the MIT License. 
