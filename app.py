@@ -8,7 +8,6 @@ import os
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from werkzeug.security import generate_password_hash, check_password_hash
 from io import BytesIO
 from reportlab.graphics.barcode import createBarcodeDrawing
 from reportlab.graphics.shapes import Drawing
@@ -112,13 +111,11 @@ class Settings(db.Model):
 class InventoryHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     action = db.Column(db.String(50), nullable=False)
     old_values = db.Column(db.JSON)
     new_values = db.Column(db.JSON)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     item = db.relationship('Item', backref='history')
-    user = db.relationship('User', backref='inventory_history')
 
 @app.route('/')
 def index():
@@ -667,7 +664,6 @@ def edit_item(id):
         
         history = InventoryHistory(
             item_id=item.id,
-            user_id=session['user_id'],
             action='edit',
             old_values=old_values,
             new_values=new_values
@@ -1193,66 +1189,7 @@ def view_bill(bill_id):
     settings = Settings.query.first()
     return render_template('view_bill.html', bill=bill, subtotal=subtotal, total_tax=total_tax, settings=settings)
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if current_user.is_authenticated:
-        return redirect(url_for('index'))
-        
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        user = User.query.filter_by(username=username).first()
-        
-        if user and user.check_password(password):
-            login_user(user)
-            user.last_login = datetime.utcnow()
-            db.session.commit()
-            session['user_id'] = user.id
-            session['username'] = user.username
-            session['user_role'] = user.role
-            flash('Logged in successfully!', 'success')
-            next_page = request.args.get('next')
-            if not next_page or not next_page.startswith('/'):
-                next_page = url_for('index')
-            return redirect(next_page)
-        else:
-            flash('Invalid username or password!', 'danger')
-    
-    return render_template('login.html')
-
-@app.route('/logout')
-def logout():
-    session.clear()
-    flash('Logged out successfully!', 'success')
-    return redirect(url_for('login'))
-
-@app.route('/reset_db')
-@login_required
-def reset_db():
-    if current_user.role != 'admin':
-        flash('Access denied. Admin privileges required.', 'danger')
-        return redirect(url_for('index'))
-    for table in reversed(db.metadata.sorted_tables):
-        if table.name != 'user':
-            db.session.execute(table.delete())
-    db.session.commit()
-    flash('Database cleared successfully!', 'success')
-    return redirect(url_for('index'))
-
-def recreate_database():
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
-        admin = User.query.filter_by(username='admin').first()
-        if not admin:
-            admin = User(username='admin', role='admin')
-            admin.set_password('admin123')
-            db.session.add(admin)
-            db.session.commit()
-            print("Admin user created!")
-
 @app.route('/delete_bill/<int:id>', methods=['POST'])
-@login_required
 def delete_bill(id):
     bill = Bill.query.get_or_404(id)
     for item in bill.items:
@@ -1263,7 +1200,6 @@ def delete_bill(id):
     return redirect(url_for('view_bills'))
 
 @app.route('/delete_item/<int:id>', methods=['POST'])
-@login_required
 def delete_item(id):
     item = Item.query.get_or_404(id)
     db.session.delete(item)
@@ -1272,5 +1208,6 @@ def delete_item(id):
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    recreate_database()
+    with app.app_context():
+        db.create_all()
     app.run(debug=True, host='0.0.0.0', port=5001) 
