@@ -109,16 +109,6 @@ class Settings(db.Model):
     bank_account_number = db.Column(db.String(50), nullable=True)
     ifsc_code = db.Column(db.String(20), nullable=True)
 
-class InventoryHistory(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
-    user_id = db.Column(db.Integer, nullable=True)
-    action = db.Column(db.String(50), nullable=False)
-    old_values = db.Column(db.Text)
-    new_values = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    item = db.relationship('Item', backref='history')
-
 @app.route('/')
 def index():
     items = Item.query.order_by(Item.name).all()
@@ -686,41 +676,12 @@ def edit_item(id):
     
     if request.method == 'POST':
         try:
-            old_values = {
-                'name': item.name,
-                'description': item.description,
-                'price': item.price,
-                'stock': item.stock,
-                'hsn_sac_number': item.hsn_sac_number,
-                'tax_rate': item.tax_rate
-            }
-            
             item.name = request.form['name']
             item.description = request.form['description']
             item.price = float(request.form['price'])
             item.stock = int(request.form['stock'])
             item.hsn_sac_number = request.form['hsn_sac_number']
             item.tax_rate = float(request.form['tax_rate'])
-            
-            new_values = {
-                'name': item.name,
-                'description': item.description,
-                'price': item.price,
-                'stock': item.stock,
-                'hsn_sac_number': item.hsn_sac_number,
-                'tax_rate': item.tax_rate
-            }
-            
-            # Create inventory history entry without user_id
-            history = InventoryHistory(
-                item_id=item.id,
-                action='edit',
-                old_values=json.dumps(old_values),
-                new_values=json.dumps(new_values),
-                created_at=datetime.utcnow(),
-                user_id=None  # Explicitly set user_id to None
-            )
-            db.session.add(history)
             
             db.session.commit()
             flash('Item updated successfully!', 'success')
@@ -731,14 +692,6 @@ def edit_item(id):
             return redirect(url_for('edit_item', id=id))
     
     return render_template('edit_item.html', item=item)
-
-@app.route('/inventory_history')
-def inventory_history():
-    history = InventoryHistory.query.order_by(InventoryHistory.created_at.desc()).all()
-    for entry in history:
-        entry.old_values_dict = json.loads(entry.old_values) if isinstance(entry.old_values, str) else entry.old_values
-        entry.new_values_dict = json.loads(entry.new_values) if isinstance(entry.new_values, str) else entry.new_values
-    return render_template('inventory_history.html', history=history)
 
 @app.route('/quotations', methods=['GET', 'POST'])
 def quotations():
@@ -1301,12 +1254,6 @@ def delete_item(id):
         quotation_items = QuotationItem.query.filter_by(item_id=id).first()
         if quotation_items:
             flash('Cannot delete item as it is associated with existing quotations!', 'danger')
-            return redirect(url_for('index'))
-            
-        # Check if item has any inventory history
-        history = InventoryHistory.query.filter_by(item_id=id).first()
-        if history:
-            flash('Cannot delete item as it has inventory history!', 'danger')
             return redirect(url_for('index'))
             
         db.session.delete(item)
