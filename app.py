@@ -12,6 +12,7 @@ from io import BytesIO
 from reportlab.graphics.barcode import createBarcodeDrawing
 from reportlab.graphics.shapes import Drawing
 from dotenv import load_dotenv
+import json
 
 # Load environment variables
 load_dotenv()
@@ -66,7 +67,7 @@ class Bill(db.Model):
 class BillItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     bill_id = db.Column(db.Integer, db.ForeignKey('bill.id'), nullable=False)
-    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=True)
     quantity = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Float, nullable=False)
     tax_rate = db.Column(db.Float, nullable=True, default=0.0)
@@ -90,7 +91,7 @@ class Quotation(db.Model):
 class QuotationItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     quotation_id = db.Column(db.Integer, db.ForeignKey('quotation.id'), nullable=False)
-    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
+    item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=True)
     quantity = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Float, nullable=False)
     tax_rate = db.Column(db.Float, nullable=True, default=0.0)
@@ -112,8 +113,8 @@ class InventoryHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     item_id = db.Column(db.Integer, db.ForeignKey('item.id'), nullable=False)
     action = db.Column(db.String(50), nullable=False)
-    old_values = db.Column(db.JSON)
-    new_values = db.Column(db.JSON)
+    old_values = db.Column(db.Text)
+    new_values = db.Column(db.Text)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     item = db.relationship('Item', backref='history')
 
@@ -664,72 +665,77 @@ def edit_customer(id):
         return redirect(url_for('customers'))
     return render_template('edit_customer.html', customer=customer)
 
-@app.route('/delete_customer/<int:id>', methods=['POST'])
+@app.route('/delete_customer/<int:id>')
 def delete_customer(id):
-    customer = Customer.query.get(id)
-    if not customer:
-        flash('Customer not found', 'error')
-        return redirect(url_for('customers'))
-    
-    # Check if customer has any bills
+    customer = Customer.query.get_or_404(id)
     if customer.bills:
-        flash('Cannot delete customer with existing bills!', 'error')
-        return redirect(url_for('customers'))
-    
-    try:
+        flash('Cannot delete customer with existing bills!', 'danger')
+    else:
         db.session.delete(customer)
         db.session.commit()
         flash('Customer deleted successfully!', 'success')
-    except Exception as e:
-        db.session.rollback()
-        flash('Error deleting customer. Please try again.', 'error')
-    
     return redirect(url_for('customers'))
 
 @app.route('/edit_item/<int:id>', methods=['GET', 'POST'])
 def edit_item(id):
-    item = Item.query.get_or_404(id)
-    if request.method == 'POST':
-        old_values = {
-            'name': item.name,
-            'description': item.description,
-            'price': item.price,
-            'stock': item.stock,
-            'hsn_sac_number': item.hsn_sac_number,
-            'tax_rate': item.tax_rate
-        }
-        
-        item.name = request.form['name']
-        item.description = request.form['description']
-        item.price = float(request.form['price'])
-        item.stock = int(request.form['stock'])
-        item.hsn_sac_number = request.form['hsn_sac_number'] if request.form['hsn_sac_number'] else None
-        item.tax_rate = float(request.form['tax_rate']) if request.form['tax_rate'] else 0.0
-        
-        new_values = {
-            'name': item.name,
-            'description': item.description,
-            'price': item.price,
-            'stock': item.stock,
-            'hsn_sac_number': item.hsn_sac_number,
-            'tax_rate': item.tax_rate
-        }
-        
-        history = InventoryHistory(
-            item_id=item.id,
-            action='edit',
-            old_values=old_values,
-            new_values=new_values
-        )
-        db.session.add(history)
-        db.session.commit()
-        flash('Item updated successfully!', 'success')
+    item = Item.query.get(id)
+    if not item:
+        flash('Item not found.', 'error')
         return redirect(url_for('index'))
+    
+    if request.method == 'POST':
+        try:
+            old_values = {
+                'name': item.name,
+                'description': item.description,
+                'price': item.price,
+                'stock': item.stock,
+                'hsn_sac_number': item.hsn_sac_number,
+                'tax_rate': item.tax_rate
+            }
+            
+            item.name = request.form['name']
+            item.description = request.form['description']
+            item.price = float(request.form['price'])
+            item.stock = int(request.form['stock'])
+            item.hsn_sac_number = request.form['hsn_sac_number']
+            item.tax_rate = float(request.form['tax_rate'])
+            
+            new_values = {
+                'name': item.name,
+                'description': item.description,
+                'price': item.price,
+                'stock': item.stock,
+                'hsn_sac_number': item.hsn_sac_number,
+                'tax_rate': item.tax_rate
+            }
+            
+            # Create inventory history entry
+            history = InventoryHistory(
+                item_id=item.id,
+                action='edit',
+                old_values=json.dumps(old_values),
+                new_values=json.dumps(new_values),
+                created_at=datetime.utcnow()
+            )
+            db.session.add(history)
+            
+            db.session.commit()
+            flash('Item updated successfully!', 'success')
+            return redirect(url_for('index'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error updating item: {str(e)}', 'error')
+            return redirect(url_for('edit_item', id=id))
+    
     return render_template('edit_item.html', item=item)
 
 @app.route('/inventory_history')
 def inventory_history():
     history = InventoryHistory.query.order_by(InventoryHistory.created_at.desc()).all()
+    for entry in history:
+        entry.old_values_dict = json.loads(entry.old_values) if isinstance(entry.old_values, str) else entry.old_values
+        entry.new_values_dict = json.loads(entry.new_values) if isinstance(entry.new_values, str) else entry.new_values
     return render_template('inventory_history.html', history=history)
 
 @app.route('/quotations', methods=['GET', 'POST'])
@@ -1244,47 +1250,89 @@ def view_bill(bill_id):
 
 @app.route('/delete_bill/<int:id>', methods=['POST'])
 def delete_bill(id):
-    bill = Bill.query.get(id)
-    if not bill:
-        flash('Bill not found', 'error')
-        return redirect(url_for('view_bills'))
-    
     try:
-        # Restore item quantities
+        bill = Bill.query.get(id)
+        if not bill:
+            flash('Bill not found!', 'danger')
+            return redirect(url_for('view_bills'))
+            
+        # Check if bill has been downloaded/generated
+        if bill.inventory_updated:
+            flash('Cannot delete bill that has already been processed!', 'danger')
+            return redirect(url_for('view_bills'))
+            
+        # Restore item stock
+        for bill_item in bill.items:
+            item = Item.query.get(bill_item.item_id)
+            if item:
+                item.stock += bill_item.quantity
+            else:
+                flash(f'Warning: Item ID {bill_item.item_id} not found while restoring stock', 'warning')
+                
+        # Delete bill items and bill
         for item in bill.items:
-            inventory_item = Item.query.get(item.item_id)
-            if inventory_item:
-                inventory_item.stock += item.quantity
-        
+            db.session.delete(item)
         db.session.delete(bill)
         db.session.commit()
         flash('Bill deleted successfully!', 'success')
     except Exception as e:
         db.session.rollback()
-        flash('Error deleting bill. Please try again.', 'error')
-    
+        flash(f'Error deleting bill: {str(e)}', 'danger')
+        
     return redirect(url_for('view_bills'))
 
 @app.route('/delete_item/<int:id>', methods=['POST'])
 def delete_item(id):
-    item = Item.query.get(id)
-    if not item:
-        flash('Item not found', 'error')
-        return redirect(url_for('index'))
-    
-    # Check if item is used in any bills
-    if item.bill_items:
-        flash('Cannot delete item that is used in bills!', 'error')
-        return redirect(url_for('index'))
-    
     try:
+        item = Item.query.get(id)
+        if not item:
+            flash('Item not found!', 'danger')
+            return redirect(url_for('index'))
+            
+        # Check if item is used in any bills
+        bill_items = BillItem.query.filter_by(item_id=id).first()
+        if bill_items:
+            flash('Cannot delete item as it is associated with existing bills!', 'danger')
+            return redirect(url_for('index'))
+            
+        # Check if item is used in any quotations
+        quotation_items = QuotationItem.query.filter_by(item_id=id).first()
+        if quotation_items:
+            flash('Cannot delete item as it is associated with existing quotations!', 'danger')
+            return redirect(url_for('index'))
+            
+        # Check if item has any inventory history
+        history = InventoryHistory.query.filter_by(item_id=id).first()
+        if history:
+            flash('Cannot delete item as it has inventory history!', 'danger')
+            return redirect(url_for('index'))
+            
         db.session.delete(item)
         db.session.commit()
         flash('Item deleted successfully!', 'success')
     except Exception as e:
         db.session.rollback()
-        flash('Error deleting item. Please try again.', 'error')
-    
+        flash(f'Error deleting item: {str(e)}', 'danger')
+        
+    return redirect(url_for('index'))
+
+@app.route('/force_delete_item/<int:id>', methods=['POST'])
+def force_delete_item(id):
+    try:
+        item = Item.query.get(id)
+        if not item:
+            flash('Item not found!', 'danger')
+            return redirect(url_for('index'))
+        # Set item_id to NULL in BillItem, QuotationItem, and InventoryHistory
+        BillItem.query.filter_by(item_id=id).update({BillItem.item_id: None})
+        QuotationItem.query.filter_by(item_id=id).update({QuotationItem.item_id: None})
+        InventoryHistory.query.filter_by(item_id=id).update({InventoryHistory.item_id: None})
+        db.session.delete(item)
+        db.session.commit()
+        flash('Item force deleted. Related records will show "Not Available".', 'warning')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error force deleting item: {str(e)}', 'danger')
     return redirect(url_for('index'))
 
 if __name__ == '__main__':

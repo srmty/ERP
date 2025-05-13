@@ -54,7 +54,7 @@
                                                 <option value="">Select Item</option>
                                                 {% for item in items %}
                                                 <option value="{{ item.id }}" data-price="{{ item.price }}">
-                                                    {{ item.name }} - ${{ "%.2f"|format(item.price) }}
+                                                    {{ item.name if item.name else 'Not Available' }} - ${{ "%.2f"|format(item.price) }}
                                                 </option>
                                                 {% endfor %}
                                             </select>

@@ -16,7 +16,6 @@
                                     <th>Date & Time</th>
                                     <th>Item</th>
                                     <th>Action</th>
-                                    <th>Changed By</th>
                                     <th>Changes</th>
                                 </tr>
                             </thead>
@@ -26,7 +25,6 @@
                                     <td>{{ entry.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                                     <td>{{ entry.item.name }}</td>
                                     <td>{{ entry.action }}</td>
-                                    <td>{{ entry.user.username }}</td>
                                     <td>
                                         <button class="btn btn-info btn-sm" type="button" data-bs-toggle="collapse" 
                                                 data-bs-target="#changes-{{ entry.id }}" aria-expanded="false">
@@ -43,12 +41,12 @@
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        {% for field in entry.old_values %}
-                                                        {% if entry.old_values[field] != entry.new_values[field] %}
+                                                        {% for field in entry.old_values_dict %}
+                                                        {% if entry.old_values_dict[field] != entry.new_values_dict[field] %}
                                                         <tr>
                                                             <td>{{ field|title }}</td>
-                                                            <td>{{ entry.old_values[field] }}</td>
-                                                            <td>{{ entry.new_values[field] }}</td>
+                                                            <td>{{ entry.old_values_dict[field] }}</td>
+                                                            <td>{{ entry.new_values_dict[field] }}</td>
                                                         </tr>
                                                         {% endif %}
                                                         {% endfor %}
