@@ -1,286 +1,221 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card shadow-sm">
-    <div class="card-header bg-primary text-white">
-        <h2 class="mb-0">Create New Bill</h2>
-    </div>
-    <div class="card-body">
-        <form method="POST" class="needs-validation" novalidate>
-            <div class="row g-3 mb-4">
-                <div class="col-md-6">
-                    <label for="customer" class="form-label">Select Customer</label>
-                    <select class="form-select" id="customer" name="customer_id">
-                        <option value="">Walk-in Customer</option>
-                        {% for customer in customers %}
-                        <option value="{{ customer.id }}">{{ customer.name }} {% if customer.phone %}({{ customer.phone }}){% endif %}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-6">
-                    <label for="date" class="form-label">Date</label>
-                    <input type="text" class="form-control" id="date" name="date" value="{{ today }}" readonly>
-                </div>
-            </div>
-            <div class="row g-3 mb-4" id="walkin-fields">
-                <div class="col-md-6">
-                    <label for="customer_name" class="form-label">Customer Name</label>
-                    <input type="text" class="form-control" id="customer_name" name="customer_name">
-                </div>
-                <div class="col-md-6">
-                    <label for="mobile_number" class="form-label">Mobile Number</label>
-                    <input type="text" class="form-control" id="mobile_number" name="mobile_number">
-                </div>
-                <div class="col-md-6">
-                    <label for="email" class="form-label">Email</label>
-                    <input type="email" class="form-control" id="email" name="email">
-                </div>
-                <div class="col-md-6">
-                    <label for="gstin" class="form-label">GSTIN</label>
-                    <input type="text" class="form-control" id="gstin" name="gstin">
-                </div>
-                <div class="col-12">
-                    <label for="address" class="form-label">Address</label>
-                    <textarea class="form-control" id="address" name="address" rows="2"></textarea>
+<div class="container">
+    <h2 class="mb-4">Create New Bill</h2>
+    <form method="POST" id="billForm">
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Customer Information</h5>
+                        <div class="mb-3">
+                            <label for="customer_id" class="form-label">Select Customer *</label>
+                            <select class="form-select" id="customer_id" name="customer_id" required>
+                                <option value="">Select a customer</option>
+                                {% for customer in customers %}
+                                <option value="{{ customer.id }}">{{ customer.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="payment_mode" class="form-label">Payment Mode</label>
+                            <select class="form-select" id="payment_mode" name="payment_mode">
+                                <option value="Cash">Cash</option>
+                                <option value="Card">Card</option>
+                                <option value="UPI">UPI</option>
+                                <option value="Bank Transfer">Bank Transfer</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
             </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Bill Information</h5>
+                        <div class="mb-3">
+                            <label class="form-label">Invoice Number</label>
+                            <input type="text" class="form-control" value="{{ invoice_number }}" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Date</label>
+                            <input type="text" class="form-control" value="{{ today }}" readonly>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-            <div class="table-responsive">
-                <table class="table table-bordered" id="items-table">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Item</th>
-                            <th>Quantity</th>
-                            <th>Price</th>
-                            <th>Total</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td>
-                                <select class="form-select item-select" name="items[]" required>
-                                    <option value="">Select Item</option>
-                                    {% for item in items %}
-                                    <option value="{{ item.id }}" data-price="{{ item.price }}" data-stock="{{ item.stock }}">
-                                        {{ item.name }} ({{ item.price }})
-                                    </option>
-                                    {% endfor %}
-                                </select>
-                            </td>
-                            <td>
-                                <input type="number" class="form-control quantity" name="quantities[]" min="1" required>
-                            </td>
-                            <td>
-                                <input type="number" class="form-control price" name="prices[]" readonly>
-                            </td>
-                            <td>
-                                <input type="number" class="form-control total" name="totals[]" readonly>
-                            </td>
-                            <td>
-                                <button type="button" class="btn btn-warning btn-sm clear-row me-1" title="Clear Row">
-                                    <i class="fas fa-eraser"></i>
-                                </button>
-                                <button type="button" class="btn btn-danger btn-sm remove-row">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <button type="button" class="btn btn-success" id="add-row">
-                        <i class="fas fa-plus me-1"></i>Add Item
-                    </button>
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Items</h5>
+                <div id="items-container">
+                    <div class="row mb-3 item-row">
+                        <div class="col-md-4">
+                            <select class="form-select item-select" name="items[]" required>
+                                <option value="">Select Item</option>
+                                {% for item in items %}
+                                <option value="{{ item.id }}" data-price="{{ item.price }}" data-stock="{{ item.stock }}">
+                                    {{ item.name }} (Stock: {{ item.stock }})
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <input type="number" class="form-control quantity-input" name="quantities[]" min="1" value="1" required>
+                        </div>
+                        <div class="col-md-2">
+                            <input type="text" class="form-control price-display" readonly>
+                        </div>
+                        <div class="col-md-2">
+                            <input type="text" class="form-control subtotal-display" readonly>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" class="btn btn-danger remove-item">Remove</button>
+                        </div>
+                    </div>
                 </div>
-                <div class="col-md-6 text-end">
-                    <h4>Total Amount: <span id="grand-total">0.00</span></h4>
+                <button type="button" class="btn btn-secondary" id="add-item">Add Item</button>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 offset-md-6">
+                        <div class="mb-3">
+                            <label class="form-label">Subtotal</label>
+                            <input type="text" class="form-control" id="subtotal" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Total Tax</label>
+                            <input type="text" class="form-control" id="total-tax" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Total Amount</label>
+                            <input type="text" class="form-control" id="total-amount" readonly>
+                        </div>
+                    </div>
                 </div>
             </div>
+        </div>
 
-            <div class="form-group">
-                <label for="payment_mode">Payment Mode</label>
-                <select class="form-control" id="payment_mode" name="payment_mode" required>
-                    <option value="cash">Cash</option>
-                    <option value="upi">UPI</option>
-                    <option value="card">Card</option>
-                    <option value="bank_transfer">Bank Transfer</option>
-                </select>
-            </div>
-
-            <div class="mt-4">
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save me-1"></i>Create Bill
-                </button>
-                <a href="{{ url_for('view_bills') }}" class="btn btn-secondary">
-                    <i class="fas fa-times me-1"></i>Cancel
-                </a>
-            </div>
-        </form>
-    </div>
+        <div class="text-end">
+            <button type="submit" class="btn btn-primary">Create Bill</button>
+        </div>
+    </form>
 </div>
-
-<!-- Add Select2 CSS -->
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/css/bootstrap-datepicker.min.css"/>
-
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const table = document.getElementById('items-table');
-    const addRowBtn = document.getElementById('add-row');
-    const grandTotalSpan = document.getElementById('grand-total');
+    const itemsContainer = document.getElementById('items-container');
+    const addItemButton = document.getElementById('add-item');
+    const form = document.getElementById('billForm');
 
-    // Add new row
-    addRowBtn.addEventListener('click', function() {
-        const tbody = table.querySelector('tbody');
-        const newRow = tbody.rows[0].cloneNode(true);
-        
-        // Clear values
-        newRow.querySelectorAll('input').forEach(input => input.value = '');
-        newRow.querySelector('select').selectedIndex = 0;
-        
-        // Add event listeners
-        addRowEventListeners(newRow);
-        tbody.appendChild(newRow);
-        initSelect2();
-    });
+    function updateTotals() {
+        let subtotal = 0;
+        let totalTax = 0;
 
-    // Add event listeners to initial row
-    addRowEventListeners(table.querySelector('tbody tr'));
-
-    // Remove row
-    table.addEventListener('click', function(e) {
-        if (e.target.closest('.remove-row')) {
-            const tbody = table.querySelector('tbody');
-            if (tbody.rows.length > 1) {
-                e.target.closest('tr').remove();
-                updateGrandTotal();
-            }
-        }
-        // Clear row
-        if (e.target.closest('.clear-row')) {
-            const row = e.target.closest('tr');
-            row.querySelector('.item-select').selectedIndex = 0;
-            $(row.querySelector('.item-select')).val('').trigger('change');
-            row.querySelector('.quantity').value = '';
-            row.querySelector('.price').value = '';
-            row.querySelector('.total').value = '';
-            updateGrandTotal();
-        }
-    });
-
-    function addRowEventListeners(row) {
-        const itemSelect = row.querySelector('.item-select');
-        const quantityInput = row.querySelector('.quantity');
-        const priceInput = row.querySelector('.price');
-        const totalInput = row.querySelector('.total');
-
-        // Native change event
-        itemSelect.addEventListener('change', function() {
-            const option = this.options[this.selectedIndex];
-            const price = option.getAttribute('data-price') || 0;
-            const stock = option.getAttribute('data-stock') || 0;
-            quantityInput.setAttribute('max', stock);
-            priceInput.value = price;
-            // If quantity is already filled, update total
-            if (quantityInput.value) {
-                const quantity = Math.min(parseInt(quantityInput.value), parseInt(stock));
-                quantityInput.value = quantity;
-                totalInput.value = (price * quantity).toFixed(2);
-            } else {
-                totalInput.value = '';
-            }
-            updateGrandTotal();
+        document.querySelectorAll('.item-row').forEach(row => {
+            const quantity = parseFloat(row.querySelector('.quantity-input').value) || 0;
+            const price = parseFloat(row.querySelector('.price-display').value) || 0;
+            const itemSubtotal = quantity * price;
+            subtotal += itemSubtotal;
         });
 
-        // Select2 event
-        $(itemSelect).on('select2:select', function (e) {
-            const option = this.options[this.selectedIndex];
-            const price = option.getAttribute('data-price') || 0;
-            const stock = option.getAttribute('data-stock') || 0;
-            quantityInput.setAttribute('max', stock);
-            priceInput.value = price;
-            if (quantityInput.value) {
-                const quantity = Math.min(parseInt(quantityInput.value), parseInt(stock));
-                quantityInput.value = quantity;
-                totalInput.value = (price * quantity).toFixed(2);
-            } else {
-                totalInput.value = '';
+        document.getElementById('subtotal').value = subtotal.toFixed(2);
+        document.getElementById('total-tax').value = totalTax.toFixed(2);
+        document.getElementById('total-amount').value = (subtotal + totalTax).toFixed(2);
+    }
+
+    function updateItemRow(row) {
+        const select = row.querySelector('.item-select');
+        const quantityInput = row.querySelector('.quantity-input');
+        const priceDisplay = row.querySelector('.price-display');
+        const subtotalDisplay = row.querySelector('.subtotal-display');
+        const option = select.options[select.selectedIndex];
+
+        if (option.value) {
+            const price = parseFloat(option.dataset.price);
+            const stock = parseInt(option.dataset.stock);
+            const quantity = parseInt(quantityInput.value) || 0;
+
+            priceDisplay.value = price.toFixed(2);
+            subtotalDisplay.value = (price * quantity).toFixed(2);
+
+            quantityInput.max = stock;
+            if (quantity > stock) {
+                quantityInput.value = stock;
+                subtotalDisplay.value = (price * stock).toFixed(2);
             }
-            updateGrandTotal();
+        } else {
+            priceDisplay.value = '';
+            subtotalDisplay.value = '';
+        }
+
+        updateTotals();
+    }
+
+    function createItemRow() {
+        const row = document.querySelector('.item-row').cloneNode(true);
+        row.querySelector('.item-select').value = '';
+        row.querySelector('.quantity-input').value = '1';
+        row.querySelector('.price-display').value = '';
+        row.querySelector('.subtotal-display').value = '';
+        return row;
+    }
+
+    addItemButton.addEventListener('click', function() {
+        const newRow = createItemRow();
+        itemsContainer.appendChild(newRow);
+        setupRowEventListeners(newRow);
+    });
+
+    function setupRowEventListeners(row) {
+        const select = row.querySelector('.item-select');
+        const quantityInput = row.querySelector('.quantity-input');
+        const removeButton = row.querySelector('.remove-item');
+
+        select.addEventListener('change', function() {
+            updateItemRow(row);
         });
 
         quantityInput.addEventListener('input', function() {
-            const price = priceInput.value || 0;
-            const stock = parseInt(this.getAttribute('max')) || 0;
-            let quantity = parseInt(this.value) || 0;
-            
-            // Ensure quantity doesn't exceed stock
-            if (quantity > stock) {
-                quantity = stock;
-                this.value = stock;
+            updateItemRow(row);
+        });
+
+        removeButton.addEventListener('click', function() {
+            if (document.querySelectorAll('.item-row').length > 1) {
+                row.remove();
+                updateTotals();
             }
-            
-            totalInput.value = (price * quantity).toFixed(2);
-            updateGrandTotal();
         });
     }
 
-    function updateGrandTotal() {
-        const totals = Array.from(document.querySelectorAll('.total'))
-            .map(input => parseFloat(input.value) || 0);
-        const grandTotal = totals.reduce((sum, total) => sum + total, 0);
-        grandTotalSpan.textContent = grandTotal.toFixed(2);
-    }
+    setupRowEventListeners(document.querySelector('.item-row'));
 
-    // Form validation
-    const form = document.querySelector('form');
-    form.addEventListener('submit', function(event) {
-        if (!form.checkValidity()) {
-            event.preventDefault();
-            event.stopPropagation();
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const customerId = document.getElementById('customer_id').value;
+        if (!customerId) {
+            alert('Please select a customer');
+            return;
         }
-        form.classList.add('was-validated');
-    });
 
-    // Show/hide walk-in fields
-    const customerSelect = document.getElementById('customer');
-    const walkinFields = document.getElementById('walkin-fields');
-    function toggleWalkinFields() {
-        if (!customerSelect.value) {
-            walkinFields.style.display = '';
-            walkinFields.querySelectorAll('input').forEach(i => i.required = false);
-        } else {
-            walkinFields.style.display = 'none';
-            walkinFields.querySelectorAll('input').forEach(i => i.required = false);
-        }
-    }
-    customerSelect.addEventListener('change', toggleWalkinFields);
-    toggleWalkinFields();
-
-    // Initialize Select2 for all item dropdowns
-    function initSelect2() {
-        $('.item-select').select2({
-            width: '100%',
-            placeholder: 'Select Item',
-            allowClear: true
+        const items = document.querySelectorAll('.item-select');
+        let hasItems = false;
+        items.forEach(item => {
+            if (item.value) hasItems = true;
         });
-    }
-    initSelect2();
 
-    // Initialize Bootstrap Datepicker for the date field
-    $('#date').datepicker({
-        format: 'dd/mm/yyyy',
-        autoclose: true,
-        todayHighlight: true
+        if (!hasItems) {
+            alert('Please add at least one item');
+            return;
+        }
+
+        this.submit();
     });
 });
 </script>

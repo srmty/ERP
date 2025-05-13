@@ -185,21 +185,20 @@ def add_item():
 def create_bill():
     if request.method == 'POST':
         customer_id = request.form.get('customer_id')
-        if customer_id:
-            customer = Customer.query.get(customer_id)
-            customer_name = customer.name
-            mobile_number = customer.phone
-            email = customer.email
-            address = customer.address
-            gstin = customer.gstin
-        else:
-            customer_name = request.form.get('customer_name', '').strip()
-            if not customer_name:
-                customer_name = 'Walk-in Customer'
-            mobile_number = request.form.get('mobile_number', '').strip() or None
-            email = request.form.get('email', '').strip() or None
-            address = request.form.get('address', '').strip() or None
-            gstin = request.form.get('gstin', '').strip() or None
+        if not customer_id:
+            flash('Please select a customer', 'danger')
+            return redirect(url_for('create_bill'))
+            
+        customer = Customer.query.get(customer_id)
+        if not customer:
+            flash('Customer not found', 'danger')
+            return redirect(url_for('create_bill'))
+            
+        customer_name = customer.name
+        mobile_number = customer.phone
+        email = customer.email
+        address = customer.address
+        gstin = customer.gstin
         payment_mode = request.form.get('payment_mode')
         items = request.form.getlist('items[]')
         quantities = request.form.getlist('quantities[]')
@@ -665,15 +664,26 @@ def edit_customer(id):
         return redirect(url_for('customers'))
     return render_template('edit_customer.html', customer=customer)
 
-@app.route('/delete_customer/<int:id>')
+@app.route('/delete_customer/<int:id>', methods=['POST'])
 def delete_customer(id):
-    customer = Customer.query.get_or_404(id)
+    customer = Customer.query.get(id)
+    if not customer:
+        flash('Customer not found', 'error')
+        return redirect(url_for('customers'))
+    
+    # Check if customer has any bills
     if customer.bills:
-        flash('Cannot delete customer with existing bills!', 'danger')
-    else:
+        flash('Cannot delete customer with existing bills!', 'error')
+        return redirect(url_for('customers'))
+    
+    try:
         db.session.delete(customer)
         db.session.commit()
         flash('Customer deleted successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('Error deleting customer. Please try again.', 'error')
+    
     return redirect(url_for('customers'))
 
 @app.route('/edit_item/<int:id>', methods=['GET', 'POST'])
@@ -1234,20 +1244,47 @@ def view_bill(bill_id):
 
 @app.route('/delete_bill/<int:id>', methods=['POST'])
 def delete_bill(id):
-    bill = Bill.query.get_or_404(id)
-    for item in bill.items:
-        db.session.delete(item)
-    db.session.delete(bill)
-    db.session.commit()
-    flash('Bill deleted successfully!', 'success')
+    bill = Bill.query.get(id)
+    if not bill:
+        flash('Bill not found', 'error')
+        return redirect(url_for('view_bills'))
+    
+    try:
+        # Restore item quantities
+        for item in bill.items:
+            inventory_item = Item.query.get(item.item_id)
+            if inventory_item:
+                inventory_item.stock += item.quantity
+        
+        db.session.delete(bill)
+        db.session.commit()
+        flash('Bill deleted successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('Error deleting bill. Please try again.', 'error')
+    
     return redirect(url_for('view_bills'))
 
 @app.route('/delete_item/<int:id>', methods=['POST'])
 def delete_item(id):
-    item = Item.query.get_or_404(id)
-    db.session.delete(item)
-    db.session.commit()
-    flash('Item deleted successfully!', 'success')
+    item = Item.query.get(id)
+    if not item:
+        flash('Item not found', 'error')
+        return redirect(url_for('index'))
+    
+    # Check if item is used in any bills
+    if item.bill_items:
+        flash('Cannot delete item that is used in bills!', 'error')
+        return redirect(url_for('index'))
+    
+    try:
+        db.session.delete(item)
+        db.session.commit()
+        flash('Item deleted successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash('Error deleting item. Please try again.', 'error')
+    
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
