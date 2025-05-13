@@ -15,9 +15,7 @@ branch_labels = None
 depends_on = None
 
 def upgrade():
-    with op.batch_alter_table('item', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('default_unit', sa.String(length=32), nullable=True))
+    op.add_column('item', sa.Column('default_unit', sa.String(length=32), nullable=True))
 
 def downgrade():
-    with op.batch_alter_table('item', schema=None) as batch_op:
-        batch_op.drop_column('default_unit') 
+    op.drop_column('item', 'default_unit') 
