@@ -42,8 +42,8 @@
                                 <select class="form-select item-select" name="items[]" required>
                                     <option value="">Select Item</option>
                                     {% for item in items %}
-                                    <option value="{{ item.id }}" data-price="{{ item.price }}" data-stock="{{ item.stock }}" data-tax="{{ item.tax_rate }}">
-                                        {{ item.name }} ({{ item.price }})
+                                    <option value="{{ item.id }}" data-price="{{ item.price }}" data-stock="{{ item.stock }}" data-tax="{{ item.tax_rate }}" data-description="{{ item.description }}">
+                                        {{ item.name }} ({{ item.description }})
                                     </option>
                                     {% endfor %}
                                 </select>
@@ -206,7 +206,17 @@ document.addEventListener('DOMContentLoaded', function() {
         $('.item-select').select2({
             placeholder: 'Select Item',
             allowClear: true,
-            width: '100%'
+            width: '250px',
+            dropdownAutoWidth: true,
+            templateResult: function (data) {
+                if (!data.id) return data.text;
+                var desc = $(data.element).data('description');
+                return $('<span style="font-size: 1.1em;">' + data.text + '</span>');
+            },
+            templateSelection: function (data) {
+                if (!data.id) return data.text;
+                return $('<span style="font-size: 1.1em;">' + data.text + '</span>');
+            }
         });
     }
 
