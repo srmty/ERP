@@ -13,6 +13,8 @@ from reportlab.graphics.barcode import createBarcodeDrawing
 from reportlab.graphics.shapes import Drawing
 from dotenv import load_dotenv
 import json
+import csv
+from io import TextIOWrapper
 
 # Load environment variables
 load_dotenv()
@@ -1282,6 +1284,36 @@ def force_delete_item(id):
         db.session.rollback()
         flash(f'Error force deleting item: {str(e)}', 'danger')
     return redirect(url_for('index'))
+
+@app.route('/import_items', methods=['GET', 'POST'])
+def import_items():
+    if request.method == 'POST':
+        if 'file' not in request.files:
+            flash('No file part', 'danger')
+            return redirect(request.url)
+        file = request.files['file']
+        if file.filename == '':
+            flash('No selected file', 'danger')
+            return redirect(request.url)
+        if file and file.filename.endswith('.csv'):
+            stream = TextIOWrapper(file.stream, encoding='utf-8')
+            csv_reader = csv.DictReader(stream)
+            for row in csv_reader:
+                item = Item(
+                    name=row['name'],
+                    description=row.get('description', ''),
+                    unit=row.get('unit', ''),
+                    price=float(row.get('price', 0)),
+                    stock=float(row.get('stock', 0))
+                )
+                db.session.add(item)
+            db.session.commit()
+            flash('Items imported successfully', 'success')
+            return redirect(url_for('items'))
+        else:
+            flash('Please upload a valid CSV file', 'danger')
+            return redirect(request.url)
+    return render_template('import_items.html')
 
 if __name__ == '__main__':
     with app.app_context():
