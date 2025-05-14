@@ -430,7 +430,7 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     invoice_date = bill.created_at.strftime('%d/%m/%Y')
     invoice_number = bill.invoice_number
     invoice_data = [
-        [Paragraph(f"<b>INVOICE #{invoice_number}</b>", ParagraphStyle(name='InvoiceLabel', fontSize=11, leading=13, alignment=0, fontName='Helvetica-Bold', textColor=accent_color))],
+        [Paragraph(f"<b>TAX INVOICE #{invoice_number}</b>", ParagraphStyle(name='InvoiceLabel', fontSize=11, leading=13, alignment=0, fontName='Helvetica-Bold', textColor=accent_color))],
         [Paragraph(f"Date: {invoice_date}", styles['NormalText'])],
         [Paragraph(f"Payment Mode: {bill.payment_mode}", styles['NormalText'])]
     ]
