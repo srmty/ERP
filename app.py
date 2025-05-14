@@ -625,8 +625,19 @@ def download_bill(bill_id):
 
 @app.route('/customers')
 def customers():
-    customers = Customer.query.order_by(Customer.name).all()
-    return render_template('customers.html', customers=customers)
+    search_query = request.args.get('search', '').strip()
+    if search_query:
+        customers = Customer.query.filter(
+            db.or_(
+                Customer.name.ilike(f'%{search_query}%'),
+                Customer.phone.ilike(f'%{search_query}%'),
+                Customer.email.ilike(f'%{search_query}%'),
+                Customer.gstin.ilike(f'%{search_query}%')
+            )
+        ).order_by(Customer.name).all()
+    else:
+        customers = Customer.query.order_by(Customer.name).all()
+    return render_template('customers.html', customers=customers, search_query=search_query)
 
 @app.route('/add_customer', methods=['GET', 'POST'])
 def add_customer():
@@ -1298,18 +1309,48 @@ def import_items():
         if file and file.filename.endswith('.csv'):
             stream = TextIOWrapper(file.stream, encoding='utf-8')
             csv_reader = csv.DictReader(stream)
+            items_updated = 0
+            items_added = 0
+            
             for row in csv_reader:
-                item = Item(
-                    name=row['name'],
-                    description=row.get('description', ''),
-                    unit=row.get('unit', ''),
-                    price=float(row.get('price', 0)),
-                    stock=float(row.get('stock', 0))
-                )
-                db.session.add(item)
+                print(f"Processing row: {row}")
+                if 'name' not in row:
+                    print(f"Skipping row due to missing 'name': {row}")
+                    continue
+                try:
+                    # Check if item exists with same name AND description
+                    existing_item = Item.query.filter_by(
+                        name=row['name'],
+                        description=row.get('description', '')
+                    ).first()
+                    
+                    if existing_item:
+                        # Update existing item
+                        existing_item.price = float(row.get('price', existing_item.price))
+                        existing_item.stock += int(row.get('stock', 0))  # Add to existing stock
+                        existing_item.hsn_sac_number = row.get('hsn_sac_number', existing_item.hsn_sac_number)
+                        existing_item.tax_rate = float(row.get('tax_rate', existing_item.tax_rate))
+                        items_updated += 1
+                    else:
+                        # Create new item
+                        item = Item(
+                            name=row['name'],
+                            description=row.get('description', ''),
+                            price=float(row.get('price', 0)),
+                            stock=int(row.get('stock', 0)),
+                            hsn_sac_number=row.get('hsn_sac_number', None),
+                            tax_rate=float(row.get('tax_rate', 0.0))
+                        )
+                        db.session.add(item)
+                        items_added += 1
+                except Exception as e:
+                    print(f"Error processing row {row}: {e}")
+                    flash(f'Error processing item {row.get("name", "Unknown")}: {str(e)}', 'danger')
+                    continue
+            
             db.session.commit()
-            flash('Items imported successfully', 'success')
-            return redirect(url_for('items'))
+            flash(f'Import completed: {items_added} new items added, {items_updated} items updated', 'success')
+            return redirect(url_for('index'))
         else:
             flash('Please upload a valid CSV file', 'danger')
             return redirect(request.url)

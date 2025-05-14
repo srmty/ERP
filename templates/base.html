@@ -6,6 +6,10 @@
     <title>Inventory Management System</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js"></script>
     <style>
         .navbar-brand {
             font-weight: bold;
@@ -25,61 +29,62 @@
             height: 2px;
             background-color: #fff;
         }
+        .navbar-nav .nav-link {
+            margin-right: 0.7rem;
+            font-size: 1.08rem;
+            transition: color 0.2s;
+        }
+        .navbar-nav .nav-link:hover, .navbar-nav .active .nav-link {
+            color: #1A8CFF !important;
+            text-decoration: underline;
+        }
+        .navbar-brand img {
+            border-radius: 8px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+        }
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
-        <div class="container">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-2">
+        <div class="container-fluid">
             <a class="navbar-brand d-flex align-items-center" href="/">
-                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="height:36px;width:auto;margin-right:10px;">
-                <span><i class="fas fa-boxes me-2"></i>Inventory System</span>
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" width="40" height="40" class="d-inline-block align-top mr-2">
+                <span class="ml-2 font-weight-bold" style="font-size: 1.5rem;">Inventory System</span>
             </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'index' %}active{% endif %}" href="/">
-                            <i class="fas fa-home me-1"></i>Home
-                        </a>
+                <ul class="navbar-nav ml-auto align-items-center">
+                    <li class="nav-item {% if request.endpoint == 'index' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('index') }}"><i class="fas fa-home"></i> Home</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'add_item' %}active{% endif %}" href="/add_item">
-                            <i class="fas fa-plus me-1"></i>Add Item
-                        </a>
+                    <li class="nav-item {% if request.endpoint == 'add_item' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('add_item') }}"><i class="fas fa-plus"></i> Add Item</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'create_bill' %}active{% endif %}" href="/create_bill">
-                            <i class="fas fa-file-invoice me-1"></i>Create Bill
-                        </a>
+                    <li class="nav-item {% if request.endpoint == 'create_bill' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('create_bill') }}"><i class="fas fa-file-alt"></i> Create Bill</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'view_bills' %}active{% endif %}" href="/bills">
-                            <i class="fas fa-list me-1"></i>View Bills
-                        </a>
+                    <li class="nav-item {% if request.endpoint == 'view_bills' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('view_bills') }}"><i class="fas fa-list"></i> View Bills</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'customers' %}active{% endif %}" href="{{ url_for('customers') }}">
-                            <i class="fas fa-users me-1"></i>Customers
-                        </a>
+                    <li class="nav-item {% if request.endpoint == 'customers' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('customers') }}"><i class="fas fa-users"></i> Customers</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'quotations' %}active{% endif %}" href="{{ url_for('quotations') }}">Quotations</a>
+                    <li class="nav-item {% if request.endpoint == 'quotations' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('quotations') }}"><i class="fas fa-file-invoice"></i> Quotations</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'settings' %}active{% endif %}" href="{{ url_for('settings') }}">
-                            <i class="fas fa-cog me-1"></i>Settings
-                        </a>
+                    <li class="nav-item {% if request.endpoint == 'settings' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('settings') }}"><i class="fas fa-cog"></i> Settings</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'export_inventory' %}active{% endif %}" href="{{ url_for('export_inventory') }}">Export Inventory</a>
+                    <li class="nav-item {% if request.endpoint == 'export_inventory' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('export_inventory') }}"><i class="fas fa-download"></i> Export Inventory</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'export_bills' %}active{% endif %}" href="{{ url_for('export_bills') }}">Export Sales</a>
+                    <li class="nav-item {% if request.endpoint == 'export_bills' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('export_bills') }}"><i class="fas fa-download"></i> Export Sales</a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'import_items' %}active{% endif %}" href="{{ url_for('import_items') }}">Import Items</a>
+                    <li class="nav-item {% if request.endpoint == 'import_items' %}active{% endif %}">
+                        <a class="nav-link" href="{{ url_for('import_items') }}"><i class="fas fa-upload"></i> Import Items</a>
                     </li>
                 </ul>
             </div>

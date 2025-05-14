@@ -30,7 +30,9 @@
                             <th>Item</th>
                             <th>Quantity</th>
                             <th>Price</th>
-                            <th>Total</th>
+                            <th>Net Amount</th>
+                            <th>Tax Rate (%)</th>
+                            <th>Tax Amount</th>
                             <th>Action</th>
                         </tr>
                     </thead>
@@ -40,7 +42,7 @@
                                 <select class="form-select item-select" name="items[]" required>
                                     <option value="">Select Item</option>
                                     {% for item in items %}
-                                    <option value="{{ item.id }}" data-price="{{ item.price }}" data-stock="{{ item.stock }}">
+                                    <option value="{{ item.id }}" data-price="{{ item.price }}" data-stock="{{ item.stock }}" data-tax="{{ item.tax_rate }}">
                                         {{ item.name }} ({{ item.price }})
                                     </option>
                                     {% endfor %}
@@ -53,12 +55,15 @@
                                 <input type="number" class="form-control price" name="prices[]" readonly>
                             </td>
                             <td>
-                                <input type="number" class="form-control total" name="totals[]" readonly>
+                                <input type="number" class="form-control net-amount" name="net_amounts[]" readonly>
                             </td>
                             <td>
-                                <button type="button" class="btn btn-warning btn-sm clear-row me-1" title="Clear Row">
-                                    <i class="fas fa-eraser"></i>
-                                </button>
+                                <input type="number" class="form-control tax-rate" name="tax_rates[]" readonly>
+                            </td>
+                            <td>
+                                <input type="number" class="form-control tax-amount" name="tax_amounts[]" readonly>
+                            </td>
+                            <td>
                                 <button type="button" class="btn btn-danger btn-sm remove-row">
                                     <i class="fas fa-trash"></i>
                                 </button>
@@ -74,12 +79,9 @@
                         <i class="fas fa-plus me-1"></i>Add Item
                     </button>
                 </div>
-                <div class="col-md-6 text-end">
-                    <h4>Total Amount: <span id="grand-total">0.00</span></h4>
-                </div>
             </div>
 
-            <div class="form-group">
+            <div class="form-group mt-3">
                 <label for="payment_mode">Payment Mode</label>
                 <select class="form-control" id="payment_mode" name="payment_mode" required>
                     <option value="cash">Cash</option>
@@ -103,7 +105,6 @@
 
 <!-- Add Select2 CSS -->
 <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/css/bootstrap-datepicker.min.css"/>
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -114,7 +115,7 @@
 document.addEventListener('DOMContentLoaded', function() {
     const table = document.getElementById('items-table');
     const addRowBtn = document.getElementById('add-row');
-    const grandTotalSpan = document.getElementById('grand-total');
+    const itemOptions = document.querySelector('.item-select').innerHTML;
 
     // Initialize Select2 for customer dropdown
     $('#customer').select2({
@@ -125,13 +126,35 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add new row
     addRowBtn.addEventListener('click', function() {
         const tbody = table.querySelector('tbody');
-        const newRow = tbody.rows[0].cloneNode(true);
-        
-        // Clear values
-        newRow.querySelectorAll('input').forEach(input => input.value = '');
-        newRow.querySelector('select').selectedIndex = 0;
-        
-        // Add event listeners
+        // Create a new row from scratch
+        const newRow = document.createElement('tr');
+        newRow.innerHTML = `
+            <td>
+                <select class="form-select item-select" name="items[]" required>
+                    ${itemOptions}
+                </select>
+            </td>
+            <td>
+                <input type="number" class="form-control quantity" name="quantities[]" min="1" required>
+            </td>
+            <td>
+                <input type="number" class="form-control price" name="prices[]" readonly>
+            </td>
+            <td>
+                <input type="number" class="form-control net-amount" name="net_amounts[]" readonly>
+            </td>
+            <td>
+                <input type="number" class="form-control tax-rate" name="tax_rates[]" readonly>
+            </td>
+            <td>
+                <input type="number" class="form-control tax-amount" name="tax_amounts[]" readonly>
+            </td>
+            <td>
+                <button type="button" class="btn btn-danger btn-sm remove-row">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
         addRowEventListeners(newRow);
         tbody.appendChild(newRow);
         initSelect2();
@@ -146,18 +169,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const tbody = table.querySelector('tbody');
             if (tbody.rows.length > 1) {
                 e.target.closest('tr').remove();
-                updateGrandTotal();
             }
-        }
-        // Clear row
-        if (e.target.closest('.clear-row')) {
-            const row = e.target.closest('tr');
-            row.querySelector('.item-select').selectedIndex = 0;
-            $(row.querySelector('.item-select')).val('').trigger('change');
-            row.querySelector('.quantity').value = '';
-            row.querySelector('.price').value = '';
-            row.querySelector('.total').value = '';
-            updateGrandTotal();
         }
     });
 
@@ -165,53 +177,36 @@ document.addEventListener('DOMContentLoaded', function() {
         const itemSelect = row.querySelector('.item-select');
         const quantityInput = row.querySelector('.quantity');
         const priceInput = row.querySelector('.price');
-        const totalInput = row.querySelector('.total');
+        const netAmountInput = row.querySelector('.net-amount');
+        const taxRateInput = row.querySelector('.tax-rate');
+        const taxAmountInput = row.querySelector('.tax-amount');
 
-        // Native change event
-        itemSelect.addEventListener('change', function() {
-            const option = this.options[this.selectedIndex];
-            const price = option.getAttribute('data-price') || 0;
-            const stock = option.getAttribute('data-stock') || 0;
+        function updateFields() {
+            const option = itemSelect.options[itemSelect.selectedIndex];
+            const price = option ? parseFloat(option.getAttribute('data-price')) || 0 : 0;
+            const stock = option ? option.getAttribute('data-stock') || 0 : 0;
+            const taxRate = option ? parseFloat(option.getAttribute('data-tax')) || 0 : 0;
+            const quantity = parseInt(quantityInput.value) || 0;
             quantityInput.setAttribute('max', stock);
             priceInput.value = price;
-            // If quantity is already filled, update total
-            if (quantityInput.value) {
-                const quantity = Math.min(parseInt(quantityInput.value), parseInt(stock));
-                quantityInput.value = quantity;
-                totalInput.value = (price * quantity).toFixed(2);
-            } else {
-                totalInput.value = '';
-            }
-            updateGrandTotal();
-        });
+            netAmountInput.value = (price * quantity).toFixed(2);
+            taxRateInput.value = taxRate;
+            taxAmountInput.value = (price * quantity * taxRate / 100).toFixed(2);
+        }
 
-        quantityInput.addEventListener('input', function() {
-            const price = parseFloat(priceInput.value) || 0;
-            const quantity = parseInt(this.value) || 0;
-            const stock = parseInt(itemSelect.options[itemSelect.selectedIndex].getAttribute('data-stock')) || 0;
-            
-            if (quantity > stock) {
-                this.value = stock;
-                flash('Quantity exceeds available stock', 'warning');
-            }
-            
-            totalInput.value = (price * this.value).toFixed(2);
-            updateGrandTotal();
-        });
-    }
+        itemSelect.addEventListener('change', updateFields);
+        $(itemSelect).on('select2:select', updateFields);
+        quantityInput.addEventListener('input', updateFields);
 
-    function updateGrandTotal() {
-        let total = 0;
-        table.querySelectorAll('.total').forEach(input => {
-            total += parseFloat(input.value) || 0;
-        });
-        grandTotalSpan.textContent = total.toFixed(2);
+        // Set fields immediately if already selected
+        updateFields();
     }
 
     function initSelect2() {
         $('.item-select').select2({
             placeholder: 'Select Item',
-            allowClear: true
+            allowClear: true,
+            width: '100%'
         });
     }
 
