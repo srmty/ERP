@@ -30,14 +30,6 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
-# --- Automatic migration on startup ---
-try:
-    from flask_migrate import upgrade
-    with app.app_context():
-        upgrade()
-except Exception as e:
-    print(f"Migration error: {e}")
-
 # Database Models
 class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -70,8 +62,6 @@ class Bill(db.Model):
     payment_mode = db.Column(db.String(50), nullable=True)
     invoice_number = db.Column(db.String(20), nullable=True)
     total_amount = db.Column(db.Float, nullable=False)
-    discount = db.Column(db.Float, nullable=True, default=0.0)
-    paid_amount = db.Column(db.Float, nullable=True, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     items = db.relationship('BillItem', backref='bill', lazy=True)
     inventory_updated = db.Column(db.Boolean, default=False)
@@ -204,8 +194,6 @@ def create_bill():
         address = customer.address
         gstin = customer.gstin
         payment_mode = request.form.get('payment_mode')
-        discount = float(request.form.get('discount', 0.0))
-        paid_amount = float(request.form.get('paid_amount', 0.0))
         items = request.form.getlist('items[]')
         quantities = request.form.getlist('quantities[]')
         
@@ -237,9 +225,7 @@ def create_bill():
             gstin=gstin,
             payment_mode=payment_mode,
             invoice_number=invoice_number,
-            total_amount=0,
-            discount=discount,
-            paid_amount=paid_amount
+            total_amount=0
         )
         db.session.add(bill)
         
@@ -262,7 +248,7 @@ def create_bill():
                     db.session.add(bill_item)
                     item.stock -= int(quantity)
         
-        total_amount = subtotal + total_tax - discount
+        total_amount = subtotal + total_tax
         bill.total_amount = total_amount
         db.session.commit()
 
@@ -529,10 +515,7 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     data.extend([
         ['', '', '', '', '', Paragraph('Subtotal:', styles['TableCell']), Paragraph(f"{subtotal:.2f}", styles['TotalAmount'])],
         ['', '', '', '', '', Paragraph('Total Tax:', styles['TableCell']), Paragraph(f"{total_tax:.2f}", styles['TotalAmount'])],
-        ['', '', '', '', '', Paragraph('Discount:', styles['TableCell']), Paragraph(f"{bill.discount:.2f}", styles['TotalAmount'])],
-        ['', '', '', '', '', Paragraph('TOTAL:', styles['TableHeader']), Paragraph(f"{bill.total_amount:.2f}", styles['TotalAmount'])],
-        ['', '', '', '', '', Paragraph('Paid Amount:', styles['TableCell']), Paragraph(f"{bill.paid_amount:.2f}", styles['TotalAmount'])],
-        ['', '', '', '', '', Paragraph('Balance Due:', styles['TableCell']), Paragraph(f"{bill.total_amount - bill.paid_amount:.2f}", styles['TotalAmount'])]
+        ['', '', '', '', '', Paragraph('TOTAL:', styles['TableHeader']), Paragraph(f"{bill.total_amount:.2f}", styles['TotalAmount'])]
     ])
     
     row_style_list.extend([
