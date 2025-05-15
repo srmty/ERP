@@ -1356,6 +1356,11 @@ def import_items():
             return redirect(request.url)
     return render_template('import_items.html')
 
+@app.route('/preview_bill/<int:bill_id>')
+def preview_bill(bill_id):
+    bill = Bill.query.get_or_404(bill_id)
+    return render_template('preview_bill.html', bill=bill)
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()

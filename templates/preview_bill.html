@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Preview Bill</h2>
+    <div class="card">
+        <div class="card-body">
+            {% include 'bill_template.html' %}
+        </div>
+    </div>
+    <div class="mt-3">
+        <a href="{{ url_for('bills') }}" class="btn btn-secondary">Back to Bills</a>
+    </div>
+</div>
+{% endblock %} 
