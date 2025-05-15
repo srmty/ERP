@@ -1367,71 +1367,88 @@ def edit_bill(bill_id):
     items = Item.query.all()
     customers = Customer.query.order_by(Customer.name).all()
     if request.method == 'POST':
-        # Restore stock for old items
-        for bill_item in bill.items:
-            item = Item.query.get(bill_item.item_id)
-            if item:
-                item.stock += bill_item.quantity
-        # Remove old bill items
-        for bill_item in bill.items:
-            db.session.delete(bill_item)
-        db.session.flush()
+        try:
+            # Restore stock for old items
+            for bill_item in bill.items:
+                item = Item.query.get(bill_item.item_id)
+                if item:
+                    item.stock += bill_item.quantity
+            # Remove old bill items
+            for bill_item in bill.items:
+                db.session.delete(bill_item)
+            db.session.flush()
 
-        # Update bill details
-        customer_id = request.form.get('customer_id')
-        customer = Customer.query.get(customer_id)
-        if not customer:
-            flash('Customer not found', 'danger')
-            return redirect(url_for('edit_bill', bill_id=bill_id))
-        bill.customer_id = customer.id
-        bill.customer_name = customer.name
-        bill.mobile_number = customer.phone
-        bill.email = customer.email
-        bill.address = customer.address
-        bill.gstin = customer.gstin
-        bill.payment_mode = request.form.get('payment_mode')
-
-        items_ids = request.form.getlist('items[]')
-        quantities = request.form.getlist('quantities[]')
-        prices = request.form.getlist('prices[]')
-        tax_rates = request.form.getlist('tax_rates[]')
-
-        subtotal = 0
-        total_tax = 0
-        total_amount = 0
-
-        for item_id, quantity, price, tax_rate in zip(items_ids, quantities, prices, tax_rates):
-            if not item_id or not quantity or not price:
-                continue
-            item = Item.query.get(item_id)
-            if not item:
-                continue
-            quantity = int(quantity)
-            price = float(price)
-            tax_rate = float(tax_rate) if tax_rate else 0.0
-            # Check stock
-            if quantity > item.stock:
-                flash(f'Insufficient stock for {item.name}. Available: {item.stock}, Requested: {quantity}', 'danger')
-                db.session.rollback()
+            # Update bill details
+            customer_id = request.form.get('customer_id')
+            customer = Customer.query.get(customer_id)
+            if not customer:
+                flash('Customer not found', 'danger')
                 return redirect(url_for('edit_bill', bill_id=bill_id))
-            item.stock -= quantity
-            item_subtotal = price * quantity
-            item_tax_amount = item_subtotal * (tax_rate / 100)
-            subtotal += item_subtotal
-            total_tax += item_tax_amount
-            bill_item = BillItem(
-                bill=bill,
-                item=item,
-                quantity=quantity,
-                price=price,
-                tax_rate=tax_rate
-            )
-            db.session.add(bill_item)
-        total_amount = subtotal + total_tax
-        bill.total_amount = total_amount
-        db.session.commit()
-        flash('Bill updated successfully!', 'success')
-        return redirect(url_for('view_bills'))
+            bill.customer_id = customer.id
+            bill.customer_name = customer.name
+            bill.mobile_number = customer.phone
+            bill.email = customer.email
+            bill.address = customer.address
+            bill.gstin = customer.gstin
+            bill.payment_mode = request.form.get('payment_mode')
+
+            items_ids = request.form.getlist('items[]')
+            quantities = request.form.getlist('quantities[]')
+            prices = request.form.getlist('prices[]')
+            tax_rates = request.form.getlist('tax_rates[]')
+
+            subtotal = 0
+            total_tax = 0
+            total_amount = 0
+
+            for item_id, quantity, price, tax_rate in zip(items_ids, quantities, prices, tax_rates):
+                if not item_id or not quantity or not price:
+                    continue
+                item = Item.query.get(item_id)
+                if not item:
+                    continue
+                quantity = int(quantity)
+                price = float(price)
+                tax_rate = float(tax_rate) if tax_rate else 0.0
+                
+                # Check stock
+                if quantity > item.stock:
+                    flash(f'Insufficient stock for {item.name}. Available: {item.stock}, Requested: {quantity}', 'danger')
+                    db.session.rollback()
+                    return redirect(url_for('edit_bill', bill_id=bill_id))
+                
+                # Update item stock
+                item.stock -= quantity
+                
+                # Calculate amounts with updated tax rate
+                item_subtotal = price * quantity
+                item_tax_amount = item_subtotal * (tax_rate / 100)
+                item_total = item_subtotal + item_tax_amount
+                
+                subtotal += item_subtotal
+                total_tax += item_tax_amount
+                total_amount += item_total
+                
+                # Create new bill item with updated values
+                bill_item = BillItem(
+                    bill=bill,
+                    item=item,
+                    quantity=quantity,
+                    price=price,
+                    tax_rate=tax_rate
+                )
+                db.session.add(bill_item)
+
+            # Update bill total with new calculations
+            bill.total_amount = total_amount
+            db.session.commit()
+            flash('Bill updated successfully!', 'success')
+            return redirect(url_for('view_bills'))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error updating bill: {str(e)}', 'danger')
+            return redirect(url_for('edit_bill', bill_id=bill_id))
+            
     return render_template('edit_bill.html', bill=bill, items=items, customers=customers)
 
 if __name__ == '__main__':
