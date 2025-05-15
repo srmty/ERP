@@ -7,4 +7,3 @@ Werkzeug==2.0.1
 gunicorn
 SQLAlchemy==1.4.49
 psycopg2-binary
-flask-wtf==1.2.1

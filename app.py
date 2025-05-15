@@ -15,9 +15,6 @@ from dotenv import load_dotenv
 import json
 import csv
 from io import TextIOWrapper
-from flask_wtf import FlaskForm
-from wtforms import StringField, SubmitField
-from wtforms.validators import DataRequired
 
 # Load environment variables
 load_dotenv()
@@ -48,7 +45,7 @@ class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(20))
-    email = db.Column(db.String(100), nullable=True)
+    email = db.Column(db.String(100))
     address = db.Column(db.String(200))
     gstin = db.Column(db.String(50))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -76,7 +73,6 @@ class BillItem(db.Model):
     quantity = db.Column(db.Integer, nullable=False)
     price = db.Column(db.Float, nullable=False)
     tax_rate = db.Column(db.Float, nullable=True, default=0.0)
-    total = db.Column(db.Float, nullable=False)
     item = db.relationship('Item')
 
 class Quotation(db.Model):
@@ -114,14 +110,6 @@ class Settings(db.Model):
     bank_name = db.Column(db.String(100), nullable=True)
     bank_account_number = db.Column(db.String(50), nullable=True)
     ifsc_code = db.Column(db.String(20), nullable=True)
-
-class CustomerForm(FlaskForm):
-    name = StringField('Name', validators=[DataRequired()])
-    phone = StringField('Phone')
-    email = StringField('Email')
-    address = StringField('Address')
-    gstin = StringField('GSTIN')
-    submit = SubmitField('Submit')
 
 @app.route('/')
 def index():
@@ -190,78 +178,93 @@ def add_item():
 @app.route('/create_bill', methods=['GET', 'POST'])
 def create_bill():
     if request.method == 'POST':
-        try:
-            # Get customer details
-            customer_name = request.form.get('customer_name')
-            mobile_number = request.form.get('mobile_number')
-            email = request.form.get('email')  # Optional email
-            address = request.form.get('address')
-            gstin = request.form.get('gstin')
-            payment_mode = request.form.get('payment_mode')
-            
-            # Create new bill
-            bill = Bill(
-                customer_name=customer_name,
-                mobile_number=mobile_number,
-                email=email,  # Will be None if not provided
-                address=address,
-                gstin=gstin,
-                payment_mode=payment_mode,
-                total_amount=0  # Will be calculated after adding items
-            )
-            db.session.add(bill)
-            db.session.flush()  # Get bill ID without committing
-
-            # Process items
-            total_amount = 0
-            items_data = request.form.getlist('items[]')
-            quantities = request.form.getlist('quantities[]')
-            prices = request.form.getlist('prices[]')
-            tax_rates = request.form.getlist('tax_rates[]')
-
-            for i in range(len(items_data)):
-                if items_data[i] and quantities[i] and prices[i]:
-                    item = Item.query.get(int(items_data[i]))
-                    if item:
-                        quantity = int(quantities[i])
-                        price = float(prices[i])
-                        tax_rate = float(tax_rates[i])
-                        
-                        # Calculate item total with tax
-                        item_total = quantity * price
-                        tax_amount = (item_total * tax_rate) / 100
-                        total_with_tax = item_total + tax_amount
-                        
-                        # Create bill item
-                        bill_item = BillItem(
-                            bill_id=bill.id,
-                            item_id=item.id,
-                            quantity=quantity,
-                            price=price,
-                            tax_rate=tax_rate,
-                            total=total_with_tax
-                        )
-                        db.session.add(bill_item)
-                        
-                        # Update stock
-                        item.stock -= quantity
-                        
-                        total_amount += total_with_tax
-
-            # Update bill total
-            bill.total_amount = total_amount
-            db.session.commit()
-            
-            return redirect(url_for('preview_bill', bill_id=bill.id))
-            
-        except Exception as e:
-            db.session.rollback()
-            flash(f'Error creating bill: {str(e)}', 'error')
+        customer_id = request.form.get('customer_id')
+        if not customer_id:
+            flash('Please select a customer', 'danger')
             return redirect(url_for('create_bill'))
+            
+        customer = Customer.query.get(customer_id)
+        if not customer:
+            flash('Customer not found', 'danger')
+            return redirect(url_for('create_bill'))
+            
+        customer_name = customer.name
+        mobile_number = customer.phone
+        email = customer.email
+        address = customer.address
+        gstin = customer.gstin
+        payment_mode = request.form.get('payment_mode')
+        items = request.form.getlist('items[]')
+        quantities = request.form.getlist('quantities[]')
+        
+        for item_id, quantity in zip(items, quantities):
+            if int(quantity) > 0:
+                item = Item.query.get(item_id)
+                if item and int(quantity) > item.stock:
+                    flash(f'Insufficient stock for {item.name}. Available: {item.stock}, Requested: {quantity}', 'danger')
+                    return redirect(url_for('create_bill'))
+        
+        now = datetime.now()
+        month_str = now.strftime('%Y-%m')
+        count = Bill.query.filter(
+            db.extract('year', Bill.created_at) == now.year,
+            db.extract('month', Bill.created_at) == now.month
+        ).count() + 1
+        invoice_number = f"SQE-{now.year}-{now.month:02d}-{count}"
+        
+        subtotal = 0
+        total_tax = 0
+        total_amount = 0
+        
+        bill = Bill(
+            customer_id=customer_id,
+            customer_name=customer_name,
+            mobile_number=mobile_number,
+            email=email,
+            address=address,
+            gstin=gstin,
+            payment_mode=payment_mode,
+            invoice_number=invoice_number,
+            total_amount=0
+        )
+        db.session.add(bill)
+        
+        for item_id, quantity in zip(items, quantities):
+            if int(quantity) > 0:
+                item = Item.query.get(item_id)
+                if item:
+                    item_tax = item.tax_rate or 0.0
+                    item_subtotal = item.price * int(quantity)
+                    item_tax_amount = item_subtotal * (item_tax / 100)
+                    subtotal += item_subtotal
+                    total_tax += item_tax_amount
+                    bill_item = BillItem(
+                        bill=bill,
+                        item=item,
+                        quantity=int(quantity),
+                        price=item.price,
+                        tax_rate=item_tax
+                    )
+                    db.session.add(bill_item)
+                    item.stock -= int(quantity)
+        
+        total_amount = subtotal + total_tax
+        bill.total_amount = total_amount
+        db.session.commit()
 
-    # GET request - show form
+        flash('Bill created successfully!', 'success')
+        return redirect(url_for('view_bills'))
+    
     items = Item.query.all()
-    return render_template('create_bill.html', items=items)
+    customers = Customer.query.order_by(Customer.name).all()
+    now = datetime.now()
+    month_str = now.strftime('%Y%m')
+    count = Bill.query.filter(
+        db.extract('year', Bill.created_at) == now.year,
+        db.extract('month', Bill.created_at) == now.month
+    ).count() + 1
+    invoice_number = f"{month_str}-{count:03d}"
+    return render_template('create_bill.html', items=items, customers=customers, invoice_number=invoice_number, today=now.strftime('%d/%m/%Y'))
 
 @app.route('/bills')
 def view_bills():
@@ -536,24 +539,10 @@ def generate_bill_pdf(bill, subtotal, total_tax):
     ]))
     elements.append(table)
     elements.append(Spacer(1, 20))
-    
-    terms_text = "Terms & Conditions: 1. Goods once sold will not be taken back or exchanged. 2. Subject to local jurisdiction."
-    
-    terms = Paragraph(terms_text, 
-                     ParagraphStyle(name='CompactTerms', 
-                                   fontSize=6, 
-                                   leading=7, 
-                                   alignment=0, 
-                                   fontName='Helvetica', 
-                                   textColor=secondary_color,
-                                   leftIndent=0,
-                                   rightIndent=0,
-                                   spaceBefore=0,
-                                   spaceAfter=0,
-                                   ))
-    elements.append(terms)
-    elements.append(Spacer(1, 1))
-    
+    # Only add the sign image, no header
+    elements.append(Table([["", Image('static/sign.png', width=100, height=50)]], colWidths=[390, 150], hAlign='RIGHT'))
+    elements.append(Spacer(1, 20))
+
     thank_you = Table([
         [Paragraph("THANK YOU FOR YOUR BUSINESS!", 
                    ParagraphStyle(name='ThankYou', fontSize=10, alignment=1, 
@@ -580,21 +569,6 @@ def generate_bill_pdf(bill, subtotal, total_tax):
                                     fontName='Helvetica', 
                                     textColor=secondary_color))
     elements.append(footer)
-    
-    elements.append(Spacer(1, 20))
-    stamp_box = Table(
-        [[Paragraph('<b>Stamp & Signature</b>', ParagraphStyle(name='StampLabel', fontSize=9, alignment=1, fontName='Helvetica'))],
-         [""]],
-        colWidths=[150], rowHeights=[15, 40]
-    )
-    stamp_box.setStyle(TableStyle([
-        ('BOX', (0, 0), (0, 1), 1, colors.HexColor('#1A8CFF')),
-        ('ALIGN', (0, 0), (0, 1), 'CENTER'),
-        ('VALIGN', (0, 0), (0, 1), 'BOTTOM'),
-        ('TOPPADDING', (0, 0), (0, 0), 2),
-        ('BOTTOMPADDING', (0, 1), (0, 1), 10),
-    ]))
-    elements.append(Table([["", stamp_box]], colWidths=[390, 150], hAlign='RIGHT'))
     
     doc.build(elements)
     buffer.seek(0)
@@ -1052,24 +1026,10 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
     ]))
     elements.append(table)
     elements.append(Spacer(1, 20))
-    
-    terms_text = "Terms & Conditions: 1. This quotation is valid until the specified date. 2. Prices are subject to change without notice. 3. All prices are exclusive of taxes unless specified. 4. Payment terms to be discussed. 5. Subject to local jurisdiction. 6. E. & O.E."
-    
-    terms = Paragraph(terms_text, 
-                     ParagraphStyle(name='CompactTerms', 
-                                   fontSize=6, 
-                                   leading=7, 
-                                   alignment=0, 
-                                   fontName='Helvetica', 
-                                   textColor=secondary_color,
-                                   leftIndent=0,
-                                   rightIndent=0,
-                                   spaceBefore=0,
-                                   spaceAfter=0,
-                                   ))
-    elements.append(terms)
-    elements.append(Spacer(1, 1))
-    
+    # Only add the sign image, no header
+    elements.append(Table([["", Image('static/sign.png', width=100, height=50)]], colWidths=[390, 150], hAlign='RIGHT'))
+    elements.append(Spacer(1, 20))
+
     thank_you = Table([
         [Paragraph("THANK YOU FOR YOUR BUSINESS!", 
                    ParagraphStyle(name='ThankYou', fontSize=10, alignment=1, 
@@ -1096,21 +1056,6 @@ def generate_quotation_pdf(quotation, subtotal, total_tax):
                                     fontName='Helvetica', 
                                     textColor=secondary_color))
     elements.append(footer)
-    
-    elements.append(Spacer(1, 20))
-    stamp_box = Table(
-        [[Paragraph('<b>Stamp & Signature</b>', ParagraphStyle(name='StampLabel', fontSize=9, alignment=1, fontName='Helvetica'))],
-         [""]],
-        colWidths=[150], rowHeights=[15, 40]
-    )
-    stamp_box.setStyle(TableStyle([
-        ('BOX', (0, 0), (0, 1), 1, colors.HexColor('#1A8CFF')),
-        ('ALIGN', (0, 0), (0, 1), 'CENTER'),
-        ('VALIGN', (0, 0), (0, 1), 'BOTTOM'),
-        ('TOPPADDING', (0, 0), (0, 0), 2),
-        ('BOTTOMPADDING', (0, 1), (0, 1), 10),
-    ]))
-    elements.append(Table([["", stamp_box]], colWidths=[390, 150], hAlign='RIGHT'))
     
     doc.build(elements)
     buffer.seek(0)
@@ -1361,73 +1306,92 @@ def preview_bill(bill_id):
 @app.route('/edit_bill/<int:bill_id>', methods=['GET', 'POST'])
 def edit_bill(bill_id):
     bill = Bill.query.get_or_404(bill_id)
-    
+    items = Item.query.all()
+    customers = Customer.query.order_by(Customer.name).all()
     if request.method == 'POST':
         try:
-            # Update bill details
-            bill.customer_name = request.form.get('customer_name')
-            bill.mobile_number = request.form.get('mobile_number')
-            bill.email = request.form.get('email')  # Optional email
-            bill.address = request.form.get('address')
-            bill.gstin = request.form.get('gstin')
-            bill.payment_mode = request.form.get('payment_mode')
-            
             # Restore stock for old items
-            for item in bill.items:
-                item.item.stock += item.quantity
-                db.session.delete(item)
-            
-            # Process new items
-            total_amount = 0
-            items_data = request.form.getlist('items[]')
+            for bill_item in bill.items:
+                item = Item.query.get(bill_item.item_id)
+                if item:
+                    item.stock += bill_item.quantity
+            # Remove old bill items
+            for bill_item in bill.items:
+                db.session.delete(bill_item)
+            db.session.flush()
+
+            # Update bill details
+            customer_id = request.form.get('customer_id')
+            customer = Customer.query.get(customer_id)
+            if not customer:
+                flash('Customer not found', 'danger')
+                return redirect(url_for('edit_bill', bill_id=bill_id))
+            bill.customer_id = customer.id
+            bill.customer_name = customer.name
+            bill.mobile_number = customer.phone
+            bill.email = customer.email
+            bill.address = customer.address
+            bill.gstin = customer.gstin
+            bill.payment_mode = request.form.get('payment_mode')
+
+            items_ids = request.form.getlist('items[]')
             quantities = request.form.getlist('quantities[]')
             prices = request.form.getlist('prices[]')
             tax_rates = request.form.getlist('tax_rates[]')
 
-            for i in range(len(items_data)):
-                if items_data[i] and quantities[i] and prices[i]:
-                    item = Item.query.get(int(items_data[i]))
-                    if item:
-                        quantity = int(quantities[i])
-                        price = float(prices[i])
-                        tax_rate = float(tax_rates[i])
-                        
-                        # Calculate item total with tax
-                        item_total = quantity * price
-                        tax_amount = (item_total * tax_rate) / 100
-                        total_with_tax = item_total + tax_amount
-                        
-                        # Create bill item
-                        bill_item = BillItem(
-                            bill_id=bill.id,
-                            item_id=item.id,
-                            quantity=quantity,
-                            price=price,
-                            tax_rate=tax_rate,
-                            total=total_with_tax
-                        )
-                        db.session.add(bill_item)
-                        
-                        # Update stock
-                        item.stock -= quantity
-                        
-                        total_amount += total_with_tax
+            subtotal = 0
+            total_tax = 0
+            total_amount = 0
 
-            # Update bill total
+            for item_id, quantity, price, tax_rate in zip(items_ids, quantities, prices, tax_rates):
+                if not item_id or not quantity or not price:
+                    continue
+                item = Item.query.get(item_id)
+                if not item:
+                    continue
+                quantity = int(quantity)
+                price = float(price)
+                tax_rate = float(tax_rate) if tax_rate else 0.0
+                
+                # Check stock
+                if quantity > item.stock:
+                    flash(f'Insufficient stock for {item.name}. Available: {item.stock}, Requested: {quantity}', 'danger')
+                    db.session.rollback()
+                    return redirect(url_for('edit_bill', bill_id=bill_id))
+                
+                # Update item stock
+                item.stock -= quantity
+                
+                # Calculate amounts with updated tax rate
+                item_subtotal = price * quantity
+                item_tax_amount = item_subtotal * (tax_rate / 100)
+                item_total = item_subtotal + item_tax_amount
+                
+                subtotal += item_subtotal
+                total_tax += item_tax_amount
+                total_amount += item_total
+                
+                # Create new bill item with updated values
+                bill_item = BillItem(
+                    bill=bill,
+                    item=item,
+                    quantity=quantity,
+                    price=price,
+                    tax_rate=tax_rate
+                )
+                db.session.add(bill_item)
+
+            # Update bill total with new calculations
             bill.total_amount = total_amount
             db.session.commit()
-            
             flash('Bill updated successfully!', 'success')
-            return redirect(url_for('preview_bill', bill_id=bill.id))
-            
+            return redirect(url_for('view_bills'))
         except Exception as e:
             db.session.rollback()
-            flash(f'Error updating bill: {str(e)}', 'error')
+            flash(f'Error updating bill: {str(e)}', 'danger')
             return redirect(url_for('edit_bill', bill_id=bill_id))
-
-    # GET request - show form
-    items = Item.query.all()
-    return render_template('edit_bill.html', bill=bill, items=items)
+            
+    return render_template('edit_bill.html', bill=bill, items=items, customers=customers)
 
 if __name__ == '__main__':
     with app.app_context():

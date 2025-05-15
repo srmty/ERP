@@ -1,143 +1,229 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2>Edit Bill</h2>
-    <form method="POST" id="billForm">
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">Customer Details</h5>
-                        <div class="mb-3">
-                            <label for="customer_name" class="form-label">Customer Name</label>
-                            <input type="text" class="form-control" id="customer_name" name="customer_name" value="{{ bill.customer_name }}" required>
-                        </div>
-                        <div class="mb-3">
-                            <label for="mobile_number" class="form-label">Mobile Number</label>
-                            <input type="text" class="form-control" id="mobile_number" name="mobile_number" value="{{ bill.mobile_number }}">
-                        </div>
-                        <div class="mb-3">
-                            <label for="email" class="form-label">Email (Optional)</label>
-                            <input type="email" class="form-control" id="email" name="email" value="{{ bill.email }}">
-                        </div>
-                        <div class="mb-3">
-                            <label for="address" class="form-label">Address</label>
-                            <textarea class="form-control" id="address" name="address" rows="2">{{ bill.address }}</textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label for="gstin" class="form-label">GSTIN</label>
-                            <input type="text" class="form-control" id="gstin" name="gstin" value="{{ bill.gstin }}">
-                        </div>
-                        <div class="mb-3">
-                            <label for="payment_mode" class="form-label">Payment Mode</label>
-                            <select class="form-select" id="payment_mode" name="payment_mode">
-                                <option value="cash" {% if bill.payment_mode == 'cash' %}selected{% endif %}>Cash</option>
-                                <option value="card" {% if bill.payment_mode == 'card' %}selected{% endif %}>Card</option>
-                                <option value="upi" {% if bill.payment_mode == 'upi' %}selected{% endif %}>UPI</option>
-                                <option value="bank_transfer" {% if bill.payment_mode == 'bank_transfer' %}selected{% endif %}>Bank Transfer</option>
-                            </select>
-                        </div>
-                    </div>
+<div class="card shadow-sm">
+    <div class="card-header bg-primary text-white">
+        <h2 class="mb-0">Edit Bill</h2>
+    </div>
+    <div class="card-body">
+        <form method="POST" class="needs-validation" novalidate>
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <label for="customer" class="form-label">Select Customer <span class="text-danger">*</span></label>
+                    <select class="form-select" id="customer" name="customer_id" required>
+                        <option value="">Select Customer</option>
+                        {% for customer in customers %}
+                        <option value="{{ customer.id }}" {% if bill.customer_id == customer.id %}selected{% endif %}>{{ customer.name }} {% if customer.phone %}({{ customer.phone }}){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label for="date" class="form-label">Date</label>
+                    <input type="text" class="form-control" id="date" name="date" value="{{ bill.created_at.strftime('%d/%m/%Y') }}" readonly>
                 </div>
             </div>
-            
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-body">
-                        <h5 class="card-title">Items</h5>
-                        <div id="items-container">
-                            {% for item in bill.items %}
-                            <div class="item-row mb-3">
-                                <div class="row">
-                                    <div class="col-md-4">
-                                        <select class="form-select item-select" name="items[]" required>
-                                            <option value="">Select Item</option>
-                                            {% for available_item in items %}
-                                            <option value="{{ available_item.id }}" 
-                                                    data-price="{{ available_item.price }}"
-                                                    data-tax="{{ available_item.tax_rate }}"
-                                                    data-stock="{{ available_item.stock }}"
-                                                    {% if item.item_id == available_item.id %}selected{% endif %}>
-                                                {{ available_item.name }} (Stock: {{ available_item.stock }})
-                                            </option>
-                                            {% endfor %}
-                                        </select>
-                                    </div>
-                                    <div class="col-md-2">
-                                        <input type="number" class="form-control quantity" name="quantities[]" placeholder="Qty" min="1" value="{{ item.quantity }}" required>
-                                    </div>
-                                    <div class="col-md-2">
-                                        <input type="number" class="form-control price" name="prices[]" placeholder="Price" step="0.01" value="{{ item.price }}" required>
-                                    </div>
-                                    <div class="col-md-2">
-                                        <input type="number" class="form-control tax-rate" name="tax_rates[]" placeholder="Tax %" step="0.01" value="{{ item.tax_rate }}" required>
-                                    </div>
-                                    <div class="col-md-2">
-                                        <button type="button" class="btn btn-danger remove-item">Remove</button>
-                                    </div>
-                                </div>
-                            </div>
-                            {% endfor %}
-                        </div>
-                        <button type="button" class="btn btn-secondary" id="add-item">Add Item</button>
-                    </div>
+
+            <div class="table-responsive">
+                <table class="table table-bordered" id="items-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Item</th>
+                            <th>Quantity</th>
+                            <th>Price</th>
+                            <th>Net Amount</th>
+                            <th>Tax Rate (%)</th>
+                            <th>Tax Amount</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bill_item in bill.items %}
+                        <tr>
+                            <td>
+                                <select class="form-select item-select" name="items[]" required>
+                                    <option value="">Select Item</option>
+                                    {% for item in items %}
+                                    <option value="{{ item.id }}" data-price="{{ item.price }}" data-stock="{{ item.stock }}" data-tax="{{ item.tax_rate }}" data-description="{{ item.description }}" {% if bill_item.item_id == item.id %}selected{% endif %}>
+                                        {{ item.name }} ({{ item.description }})
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td>
+                                <input type="number" class="form-control quantity" name="quantities[]" min="1" value="{{ bill_item.quantity }}" required>
+                            </td>
+                            <td>
+                                <input type="number" class="form-control price" name="prices[]" value="{{ bill_item.price }}" readonly>
+                            </td>
+                            <td>
+                                <input type="number" class="form-control net-amount" name="net_amounts[]" value="{{ '%.2f' % (bill_item.price * bill_item.quantity) }}" readonly>
+                            </td>
+                            <td>
+                                <input type="number" class="form-control tax-rate" name="tax_rates[]" value="{{ bill_item.tax_rate }}" readonly>
+                            </td>
+                            <td>
+                                <input type="number" class="form-control tax-amount" name="tax_amounts[]" value="{{ '%.2f' % (bill_item.price * bill_item.quantity * (bill_item.tax_rate or 0) / 100) }}" readonly>
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-danger btn-sm remove-row">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <button type="button" class="btn btn-success" id="add-row">
+                        <i class="fas fa-plus me-1"></i>Add Item
+                    </button>
                 </div>
             </div>
-        </div>
-        
-        <div class="row">
-            <div class="col-12">
-                <button type="submit" class="btn btn-primary">Update Bill</button>
-                <a href="{{ url_for('view_bills') }}" class="btn btn-secondary">Cancel</a>
+
+            <div class="form-group mt-3">
+                <label for="payment_mode">Payment Mode</label>
+                <select class="form-control" id="payment_mode" name="payment_mode" required>
+                    <option value="cash" {% if bill.payment_mode == 'cash' %}selected{% endif %}>Cash</option>
+                    <option value="upi" {% if bill.payment_mode == 'upi' %}selected{% endif %}>UPI</option>
+                    <option value="card" {% if bill.payment_mode == 'card' %}selected{% endif %}>Card</option>
+                    <option value="bank_transfer" {% if bill.payment_mode == 'bank_transfer' %}selected{% endif %}>Bank Transfer</option>
+                </select>
             </div>
-        </div>
-    </form>
+
+            <div class="mt-4">
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-save me-1"></i>Edit Bill
+                </button>
+                <a href="{{ url_for('view_bills') }}" class="btn btn-secondary">
+                    <i class="fas fa-times me-1"></i>Cancel
+                </a>
+            </div>
+        </form>
+    </div>
 </div>
+
+<!-- Add Select2 CSS -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/css/bootstrap-datepicker.min.css"/>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    const itemsContainer = document.getElementById('items-container');
-    const addItemButton = document.getElementById('add-item');
-    
-    // Function to create a new item row
-    function createItemRow() {
-        const template = itemsContainer.querySelector('.item-row').cloneNode(true);
-        template.querySelector('.item-select').value = '';
-        template.querySelector('.quantity').value = '';
-        template.querySelector('.price').value = '';
-        template.querySelector('.tax-rate').value = '';
-        return template;
+    const table = document.getElementById('items-table');
+    const addRowBtn = document.getElementById('add-row');
+    const itemOptions = document.querySelector('.item-select').innerHTML;
+
+    // Initialize Select2 for customer dropdown
+    $('#customer').select2({
+        placeholder: 'Select Customer',
+        allowClear: true
+    });
+
+    // Add new row
+    addRowBtn.addEventListener('click', function() {
+        const tbody = table.querySelector('tbody');
+        // Create a new row from scratch
+        const newRow = document.createElement('tr');
+        newRow.innerHTML = `
+            <td>
+                <select class="form-select item-select" name="items[]" required>
+                    ${itemOptions}
+                </select>
+            </td>
+            <td>
+                <input type="number" class="form-control quantity" name="quantities[]" min="1" required>
+            </td>
+            <td>
+                <input type="number" class="form-control price" name="prices[]" readonly>
+            </td>
+            <td>
+                <input type="number" class="form-control net-amount" name="net_amounts[]" readonly>
+            </td>
+            <td>
+                <input type="number" class="form-control tax-rate" name="tax_rates[]" readonly>
+            </td>
+            <td>
+                <input type="number" class="form-control tax-amount" name="tax_amounts[]" readonly>
+            </td>
+            <td>
+                <button type="button" class="btn btn-danger btn-sm remove-row">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
+        addRowEventListeners(newRow);
+        tbody.appendChild(newRow);
+        initSelect2();
+    });
+
+    // Add event listeners to all rows
+    document.querySelectorAll('#items-table tbody tr').forEach(addRowEventListeners);
+
+    // Remove row
+    table.addEventListener('click', function(e) {
+        if (e.target.closest('.remove-row')) {
+            const tbody = table.querySelector('tbody');
+            if (tbody.rows.length > 1) {
+                e.target.closest('tr').remove();
+            }
+        }
+    });
+
+    function addRowEventListeners(row) {
+        const itemSelect = row.querySelector('.item-select');
+        const quantityInput = row.querySelector('.quantity');
+        const priceInput = row.querySelector('.price');
+        const netAmountInput = row.querySelector('.net-amount');
+        const taxRateInput = row.querySelector('.tax-rate');
+        const taxAmountInput = row.querySelector('.tax-amount');
+
+        function updateFields() {
+            const option = itemSelect.options[itemSelect.selectedIndex];
+            const price = option ? parseFloat(option.getAttribute('data-price')) || 0 : 0;
+            const stock = option ? option.getAttribute('data-stock') || 0 : 0;
+            const taxRate = option ? parseFloat(option.getAttribute('data-tax')) || 0 : 0;
+            const quantity = parseInt(quantityInput.value) || 0;
+            quantityInput.setAttribute('max', stock);
+            priceInput.value = price;
+            netAmountInput.value = (price * quantity).toFixed(2);
+            taxRateInput.value = taxRate;
+            taxAmountInput.value = (price * quantity * taxRate / 100).toFixed(2);
+        }
+
+        itemSelect.addEventListener('change', updateFields);
+        $(itemSelect).on('select2:select', updateFields);
+        quantityInput.addEventListener('input', updateFields);
+
+        // Set fields immediately if already selected
+        updateFields();
     }
-    
-    // Add new item row
-    addItemButton.addEventListener('click', function() {
-        itemsContainer.appendChild(createItemRow());
-    });
-    
-    // Remove item row
-    itemsContainer.addEventListener('click', function(e) {
-        if (e.target.classList.contains('remove-item')) {
-            if (itemsContainer.querySelectorAll('.item-row').length > 1) {
-                e.target.closest('.item-row').remove();
+
+    function initSelect2() {
+        $('.item-select').select2({
+            placeholder: 'Select Item',
+            allowClear: true,
+            width: '250px',
+            dropdownAutoWidth: true,
+            templateResult: function (data) {
+                if (!data.id) return data.text;
+                var desc = $(data.element).data('description');
+                return $('<span style="font-size: 1.1em;">' + data.text + '</span>');
+            },
+            templateSelection: function (data) {
+                if (!data.id) return data.text;
+                return $('<span style="font-size: 1.1em;">' + data.text + '</span>');
             }
-        }
-    });
-    
-    // Update price and tax rate when item is selected
-    itemsContainer.addEventListener('change', function(e) {
-        if (e.target.classList.contains('item-select')) {
-            const option = e.target.options[e.target.selectedIndex];
-            const row = e.target.closest('.item-row');
-            const priceInput = row.querySelector('.price');
-            const taxRateInput = row.querySelector('.tax-rate');
-            
-            if (option.value) {
-                priceInput.value = option.dataset.price;
-                taxRateInput.value = option.dataset.tax || 0;
-            }
-        }
-    });
+        });
+    }
+
+    // Initialize Select2 for all item selects
+    initSelect2();
 });
 </script>
 {% endblock %} 
