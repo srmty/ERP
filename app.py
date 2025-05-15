@@ -30,6 +30,14 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 
+# --- Automatic migration on startup ---
+try:
+    from flask_migrate import upgrade
+    with app.app_context():
+        upgrade()
+except Exception as e:
+    print(f"Migration error: {e}")
+
 # Database Models
 class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
