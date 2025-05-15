@@ -1,0 +1,71 @@
+<div class="container">
+    <div class="row">
+        <div class="col-md-12">
+            <h3>Bill Details</h3>
+            <table class="table table-bordered">
+                <tr>
+                    <th>Invoice Number</th>
+                    <td>{{ bill.invoice_number }}</td>
+                </tr>
+                <tr>
+                    <th>Customer Name</th>
+                    <td>{{ bill.customer_name }}</td>
+                </tr>
+                <tr>
+                    <th>Mobile Number</th>
+                    <td>{{ bill.mobile_number or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <th>Email</th>
+                    <td>{{ bill.email or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <th>Address</th>
+                    <td>{{ bill.address or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <th>GSTIN</th>
+                    <td>{{ bill.gstin or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <th>Payment Mode</th>
+                    <td>{{ bill.payment_mode or 'N/A' }}</td>
+                </tr>
+                <tr>
+                    <th>Date</th>
+                    <td>{{ bill.created_at.strftime('%d/%m/%Y') }}</td>
+                </tr>
+            </table>
+
+            <h4>Items</h4>
+            <table class="table table-bordered">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Quantity</th>
+                        <th>Price</th>
+                        <th>Tax Rate</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in bill.items %}
+                    <tr>
+                        <td>{{ item.item.name }}</td>
+                        <td>{{ item.quantity }}</td>
+                        <td>₹{{ "%.2f"|format(item.price) }}</td>
+                        <td>{{ item.tax_rate }}%</td>
+                        <td>₹{{ "%.2f"|format(item.price * item.quantity * (1 + item.tax_rate/100)) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th colspan="4" class="text-right">Total Amount:</th>
+                        <th>₹{{ "%.2f"|format(bill.total_amount) }}</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div> 
